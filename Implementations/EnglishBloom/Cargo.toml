@@ -1,0 +1,8 @@
+[package]
+name = "inputkey-english-bloom"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+inputkey-core-abstractions = { path = "../../CoreAbstractions" }

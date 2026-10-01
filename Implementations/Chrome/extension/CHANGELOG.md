@@ -1,0 +1,25 @@
+# 5.0.0
+
+- Rewrote the production engine and native integrations in Rust.
+- Preserved Telex, Simple Telex, VNI, repeat-cancel, Auto Restore, and existing regression behavior.
+- Added whole-word undo: `refer → rể → shortcut → refer`.
+- Added configurable whole-word shortcuts. Browser/Windows default to Ctrl+Space; macOS defaults to Control+;.
+- Chrome/Edge now use the packaged Rust `inputkey.wasm` engine.
+- Added native Windows, macOS InputMethodKit, Linux Fcitx5, and Linux IBus builds.
+- Added architecture checks and Linux/Windows/macOS CI.
+
+# 4.1.4
+
+- Fixed repeat-cancel continuation, including the `urrl → url` family of cases.
+- Kept English recovery working for words such as `password`.
+- Added regression coverage for repeated tone modifiers.
+
+# 4.1.3
+
+- Fixed repeat-cancel for `[` and `]` shortcuts.
+
+# 4.1.1
+
+- Made repeat-to-cancel always available, for example `docss → docs`.
+- Removed the old Smart double-cancel option.
+- Improved late-shape cancellation, navigation behavior, and visible version information.

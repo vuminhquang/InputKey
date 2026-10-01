@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>InputKey</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <main>
+    <div class="top">
+      <div>
+        <h1>InputKey</h1>
+        <p class="sub">Gõ tiếng Việt trong Chrome · Telex / VNI</p>
+        <p id="version" class="sub"></p>
+      </div>
+      <button id="toggle" class="mode" aria-label="Bật hoặc tắt gõ tiếng Việt" title="Bật/tắt tiếng Việt">V</button>
+    </div>
+
+    <label class="field">
+      <span>Kiểu gõ</span>
+      <select id="method" aria-label="Kiểu gõ">
+        <option value="telex">Telex</option>
+        <option value="vni">VNI</option>
+      </select>
+    </label>
+
+    <label class="check">
+      <input id="simpleTelex" type="checkbox">
+      <span>Simple Telex (W đầu từ không thành ư)</span>
+    </label>
+
+    <label class="check">
+      <input id="autoRestore" type="checkbox">
+      <span>Tự trả phím gốc khi từ không hợp lệ tiếng Việt (khuyên dùng)</span>
+    </label>
+
+    <p class="micro-note">Nhấn lặp phím dấu để hủy: gõ docss → docs; pass → pas; passs → pass. Các từ password, coffee vẫn được giữ nguyên.</p>
+
+    <label class="check">
+      <input id="showToast" type="checkbox">
+      <span>Hiện thông báo V / E khi chuyển chế độ</span>
+    </label>
+
+    <section class="shortcut" aria-label="Phím tắt bỏ dấu cả từ">
+      <strong>Hoàn tác dấu của từ</strong>
+      <div class="shortcut-controls">
+        <button id="shortcutRecord" type="button">Ctrl + Space</button>
+        <label class="shortcut-enable"><input id="shortcutEnabled" type="checkbox"> Bật</label>
+        <button id="shortcutReset" type="button">Đặt lại</button>
+      </div>
+      <small id="shortcutStatus" aria-live="polite">refer → rể → phím tắt → refer</small>
+    </section>
+
+    <div class="hint">
+      <strong>Phím tắt:</strong> Ctrl + Shift hoặc Alt + Z<br>
+      <strong>Telex:</strong> aa → â · aw → ă · dd → đ · s/f/r/x/j → dấu thanh<br>
+      <strong>VNI:</strong> 6/7/8/9 → dấu chữ · 1–5 → dấu thanh
+    </div>
+
+    <div class="test">
+      <label for="try">Thử gõ ngay</label>
+      <textarea id="try" rows="2" placeholder="Thử: tieengs Vieetj, dduwowngf"></textarea>
+      <small>Ô thử chạy trực tiếp bằng engine của extension.</small>
+    </div>
+
+    <p class="foot">Xử lý cục bộ · không lưu hoặc gửi nội dung bạn gõ</p>
+    <p class="developer">Developer: <a href="mailto:vu.minh.quang@outlook.com">vu.minh.quang@outlook.com</a></p>
+  </main>
+  <script src="engine_wasm.js"></script>
+  <script src="literalize_shortcut.js"></script>
+  <script src="popup.js"></script>
+</body>
+</html>

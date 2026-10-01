@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CFBundleDevelopmentRegion</key>
+    <string>en</string>
+    <key>CFBundleDisplayName</key>
+    <string>InputKey</string>
+    <key>CFBundleExecutable</key>
+    <string>InputKey</string>
+    <key>CFBundleIdentifier</key>
+    <string>org.inputkey.inputmethod</string>
+    <key>CFBundleInfoDictionaryVersion</key>
+    <string>6.0</string>
+    <key>CFBundleName</key>
+    <string>InputKey</string>
+    <key>CFBundlePackageType</key>
+    <string>APPL</string>
+    <key>CFBundleShortVersionString</key>
+    <string>5.0.0</string>
+    <key>CFBundleVersion</key>
+    <string>5.0.0</string>
+    <key>InputMethodConnectionName</key>
+    <string>InputKey_Connection</string>
+    <key>InputMethodServerControllerClass</key>
+    <string>InputKeyInputController</string>
+    <key>LSBackgroundOnly</key>
+    <true/>
+    <key>LSUIElement</key>
+    <true/>
+    <key>NSPrincipalClass</key>
+    <string>NSApplication</string>
+    <key>TISInputSourceID</key>
+    <string>org.inputkey.inputmethod.vi</string>
+    <key>TISIntendedLanguage</key>
+    <string>vi</string>
+    <key>tsInputMethodIconFileKey</key>
+    <string>InputKey.png</string>
+    <key>tsInputMethodCharacterRepertoireKey</key>
+    <array>
+        <string>vi</string>
+    </array>
+</dict>
+</plist>

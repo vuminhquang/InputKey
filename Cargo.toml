@@ -1,0 +1,18 @@
+[workspace]
+members = [
+    "Boundary",
+    "CoreAbstractions",
+    "Operators",
+    "Implementations/EnglishBloom",
+    "Implementations/EventBus",
+    "Implementations/WindowsHook",
+    "Bootstrap/CABI",
+    "Bootstrap/WASM",
+    "Bootstrap/WindowsHook",
+]
+resolver = "2"
+
+[workspace.package]
+version = "5.0.0"
+edition = "2021"
+license = "GPL-2.0-or-later"

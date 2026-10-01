@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<component>
+  <name>org.freedesktop.IBus.InputKey</name>
+  <description>InputKey Vietnamese input method</description>
+  <exec>/usr/libexec/ibus-engine-inputkey</exec>
+  <version>5.0.0</version>
+  <author>InputKey contributors</author>
+  <license>GPL-2.0-or-later</license>
+  <textdomain>inputkey</textdomain>
+  <engines>
+    <engine>
+      <name>inputkey</name>
+      <longname>InputKey</longname>
+      <language>vi</language>
+      <license>GPL-2.0-or-later</license>
+      <author>InputKey contributors</author>
+      <layout>us</layout>
+      <symbol>VI</symbol>
+      <description>InputKey Telex/VNI input method</description>
+    </engine>
+  </engines>
+</component>

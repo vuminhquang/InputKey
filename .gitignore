@@ -1,0 +1,15 @@
+# Build outputs
+/target/
+/dist/
+/Implementations/Chrome/extension/inputkey.wasm
+/Bootstrap/Build/out/
+
+# Local/editor noise
+*.log
+*.tmp
+*.bak
+*.orig
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

@@ -1,0 +1,9 @@
+[package]
+name = "inputkey-operators"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+inputkey-boundary = { path = "../Boundary" }
+inputkey-core-abstractions = { path = "../CoreAbstractions" }

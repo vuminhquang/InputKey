@@ -1,0 +1,11 @@
+{
+  "extName": {
+    "message": "InputKey — Vietnamese Keyboard"
+  },
+  "extDescription": {
+    "message": "Free & open-source Vietnamese keyboard for Telex and VNI. Local-first: typed text stays in your browser."
+  },
+  "actionTitle": {
+    "message": "InputKey"
+  }
+}

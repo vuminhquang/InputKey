@@ -1,0 +1,199 @@
+name: build
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  linux:
+    name: Linux + Web
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+          targets: wasm32-unknown-unknown
+
+      - name: Install native adapter dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake pkg-config zip gcc g++ libibus-1.0-dev libfcitx5core-dev
+
+      - name: Architecture
+        run: python Bootstrap/Build/check-architecture.py
+
+      - name: Rust format
+        run: cargo fmt --all -- --check
+
+      - name: Rust tests
+        run: cargo test --workspace
+
+      - name: Rust clippy
+        run: cargo clippy --workspace --all-targets -- -D warnings
+
+      - name: C ABI
+        run: cargo build --release -p inputkey-cabi
+
+      - name: Linux shortcut parser
+        run: sh Bootstrap/Build/test-linux-shortcut.sh
+
+      - name: Build Fcitx5 adapter
+        run: |
+          cmake -S Implementations/Linux/Fcitx5 -B target/fcitx5 \
+            -DINPUTKEY_NATIVE_LIB_DIR="$PWD/target/release"
+          cmake --build target/fcitx5 --parallel
+
+      - name: Build IBus adapter
+        run: |
+          cmake -S Implementations/Linux/IBus -B target/ibus \
+            -DINPUTKEY_NATIVE_LIB_DIR="$PWD/target/release"
+          cmake --build target/ibus --parallel
+
+      - name: Build Chrome and Edge package
+        run: sh Bootstrap/Build/build-chrome.sh
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: InputKey-Chromium
+          path: dist/chrome/InputKey-*.zip
+          if-no-files-found: error
+
+  windows:
+    name: Windows
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Architecture
+        run: python Bootstrap/Build/check-architecture.py
+
+      - name: Windows hot-path contract
+        run: python Bootstrap/Build/check-windows-hook.py
+
+      - name: Rust format
+        run: cargo fmt --all -- --check
+
+      - name: Rust tests
+        run: cargo test --workspace
+
+      - name: Rust clippy
+        run: cargo clippy --workspace --all-targets -- -D warnings
+
+      - name: Build C ABI and smoke test
+        shell: pwsh
+        run: |
+          cargo build --release -p inputkey-cabi
+          python Bootstrap/Build/cabi-smoke.py
+
+      - name: Build Windows app
+        shell: pwsh
+        run: .\Bootstrap\Build\build-windows.ps1
+
+      - name: Windows lifecycle smoke
+        shell: pwsh
+        run: .\Bootstrap\Build\test-windows-lifecycle.ps1
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: InputKey-Windows
+          path: dist/windows/**
+          if-no-files-found: error
+
+  macos:
+    name: macOS
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Architecture
+        run: python3 Bootstrap/Build/check-architecture.py
+
+      - name: Rust format
+        run: cargo fmt --all -- --check
+
+      - name: Rust tests
+        run: cargo test --workspace
+
+      - name: Rust clippy
+        run: cargo clippy --workspace --all-targets -- -D warnings
+
+      - name: Build InputMethodKit app
+        run: sh Bootstrap/Build/build-macos.sh
+
+      - name: Verify app bundle
+        run: |
+          VERSION=$(tr -d '\r\n' < VERSION)
+          test -x dist/macos/InputKey.app/Contents/MacOS/InputKey
+          test -f dist/macos/InputKey.app/Contents/Info.plist
+          test -f dist/macos/InputKey.app/Contents/Frameworks/libinputkey_cabi.dylib
+          test -f "dist/InputKey-macOS-$VERSION.zip"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: InputKey-macOS
+          path: dist/InputKey-macOS-*.zip
+          if-no-files-found: error
+
+  release:
+    name: GitHub Release
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [linux, windows, macos]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: InputKey-Chromium
+          path: release/chromium
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: InputKey-Windows
+          path: release/windows
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: InputKey-macOS
+          path: release/macos
+
+      - name: Prepare release assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION="${GITHUB_REF_NAME#v}"
+          mkdir -p release/out
+          cp "release/chromium/InputKey-$VERSION.zip" "release/out/InputKey-Chromium-$VERSION.zip"
+          cp "release/macos/InputKey-macOS-$VERSION.zip" "release/out/InputKey-macOS-$VERSION.zip"
+          (
+            cd release/windows
+            zip -qr "../out/InputKey-Windows-$VERSION.zip" .
+          )
+
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          gh release create "$GITHUB_REF_NAME" \
+            "release/out/InputKey-Chromium-$VERSION.zip" \
+            "release/out/InputKey-Windows-$VERSION.zip" \
+            "release/out/InputKey-macOS-$VERSION.zip" \
+            --title "InputKey $VERSION" \
+            --generate-notes

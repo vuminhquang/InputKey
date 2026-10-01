@@ -1,0 +1,11 @@
+{
+  "extName": {
+    "message": "InputKey — Bộ gõ tiếng Việt"
+  },
+  "extDescription": {
+    "message": "Bộ gõ tiếng Việt mã nguồn mở, miễn phí cho Telex và VNI. Xử lý cục bộ ngay trong trình duyệt."
+  },
+  "actionTitle": {
+    "message": "InputKey"
+  }
+}
