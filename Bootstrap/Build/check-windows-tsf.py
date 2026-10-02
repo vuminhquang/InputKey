@@ -29,6 +29,8 @@ for required in [
     "ValidateCaret",
     "InsertTextAtSelection",
     "TF_IAS_NO_DEFAULT_COMPOSITION",
+    "ITfKeyTraceEventSink",
+    "OnKeyTraceDown",
 ]:
     if required not in service:
         errors.append(f"WindowsTSF service missing lifecycle primitive: {required}")

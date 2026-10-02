@@ -29,7 +29,8 @@ use windows::{
             TextServices::{
                 ITfComposition, ITfCompositionSink, ITfCompositionSink_Impl, ITfContext,
                 ITfContextComposition, ITfEditSession, ITfEditSession_Impl, ITfInsertAtSelection,
-                ITfKeyEventSink, ITfKeyEventSink_Impl, ITfKeystrokeMgr, ITfTextInputProcessor,
+                ITfKeyEventSink, ITfKeyEventSink_Impl, ITfKeyTraceEventSink,
+                ITfKeyTraceEventSink_Impl, ITfKeystrokeMgr, ITfSource, ITfTextInputProcessor,
                 ITfTextInputProcessor_Impl, ITfThreadMgr, TF_AE_END, TF_ANCHOR_END,
                 TF_ANCHOR_START, TF_DEFAULT_SELECTION, TF_ES_READWRITE, TF_ES_SYNC,
                 TF_IAS_NO_DEFAULT_COMPOSITION, TF_SELECTION, TF_SELECTIONSTYLE,
@@ -486,10 +487,11 @@ fn request_edit(
     result.ok()
 }
 
-#[implement(ITfTextInputProcessor, ITfKeyEventSink)]
+#[implement(ITfTextInputProcessor, ITfKeyEventSink, ITfKeyTraceEventSink)]
 pub struct TextService {
     control: Rc<ControlState>,
     thread_mgr: Mutex<Option<ITfThreadMgr>>,
+    key_trace_cookie: Mutex<Option<u32>>,
 }
 
 impl TextService {
@@ -498,6 +500,40 @@ impl TextService {
         Self {
             control: Rc::new(ControlState::new(factory, config)),
             thread_mgr: Mutex::new(None),
+            key_trace_cookie: Mutex::new(None),
+        }
+    }
+
+    fn focused_context(&self) -> Result<ITfContext> {
+        let thread_mgr = self
+            .thread_mgr
+            .lock()
+            .expect("thread manager lock")
+            .clone()
+            .ok_or_else(pointer_error)?;
+        let document = unsafe { thread_mgr.GetFocus()? };
+        unsafe { document.GetTop() }
+    }
+
+    fn commit_traced_boundary(&self, vk: u32) {
+        if !commit_then_pass_key(vk) || !self.control.enabled.load(Ordering::Acquire) {
+            return;
+        }
+
+        let text = {
+            let mut runtime = self.control.runtime.lock().expect("runtime lock");
+            if !runtime.active() {
+                return;
+            }
+            runtime.engine.commit_displayed()
+        };
+
+        let Ok(context) = self.focused_context() else {
+            self.fail_open();
+            return;
+        };
+        if request_edit(&self.control, &context, EditAction::Commit(text)).is_err() {
+            self.fail_open();
         }
     }
 
@@ -580,7 +616,10 @@ impl TextService {
         if !active {
             return false;
         }
-        if vk == VK_BACK.0 as u32 || vk == VK_ESCAPE.0 as u32 || commit_then_pass_key(vk) {
+        if commit_then_pass_key(vk) {
+            return false;
+        }
+        if vk == VK_BACK.0 as u32 || vk == VK_ESCAPE.0 as u32 {
             return true;
         }
         self.delimiter_char(vk).is_some()
@@ -672,20 +711,6 @@ impl TextService {
             return Ok(BOOL::from(true));
         }
 
-        if commit_then_pass_key(vk) {
-            let text = {
-                let mut runtime = self.control.runtime.lock().expect("runtime lock");
-                if !runtime.active() {
-                    return Ok(BOOL::from(false));
-                }
-                runtime.engine.commit_displayed()
-            };
-            if request_edit(&self.control, context, EditAction::Commit(text)).is_err() {
-                self.fail_open();
-            }
-            return Ok(BOOL::from(false));
-        }
-
         let Some(delimiter) = self.delimiter_char(vk) else {
             return Ok(BOOL::from(false));
         };
@@ -723,6 +748,20 @@ impl ITfTextInputProcessor_Impl for TextService_Impl {
             key_mgr.AdviseKeyEventSink(tid, &sink, true)?;
         }
 
+        let source: ITfSource = thread_mgr.cast()?;
+        let trace_sink: ITfKeyTraceEventSink = self.to_interface();
+        let trace_cookie =
+            match unsafe { source.AdviseSink(&ITfKeyTraceEventSink::IID, &trace_sink) } {
+                Ok(cookie) => cookie,
+                Err(error) => {
+                    unsafe {
+                        let _ = key_mgr.UnadviseKeyEventSink(tid);
+                    }
+                    return Err(error);
+                }
+            };
+        *self.key_trace_cookie.lock().expect("key trace cookie lock") = Some(trace_cookie);
+
         self.control.client_id.store(tid, Ordering::Release);
         if self.control.control_hwnd.load(Ordering::Acquire) == 0 {
             let _ = create_control_window(&self.control)?;
@@ -735,6 +774,18 @@ impl ITfTextInputProcessor_Impl for TextService_Impl {
         self.control.notify_composition_state(false);
         let tid = self.control.client_id.swap(0, Ordering::AcqRel);
         if let Some(thread_mgr) = self.thread_mgr.lock().expect("thread manager lock").take() {
+            if let Some(cookie) = self
+                .key_trace_cookie
+                .lock()
+                .expect("key trace cookie lock")
+                .take()
+            {
+                if let Ok(source) = thread_mgr.cast::<ITfSource>() {
+                    unsafe {
+                        let _ = source.UnadviseSink(cookie);
+                    }
+                }
+            }
             if let Ok(key_mgr) = thread_mgr.cast::<ITfKeystrokeMgr>() {
                 if tid != 0 {
                     unsafe {
@@ -783,6 +834,17 @@ impl ITfKeyEventSink_Impl for TextService_Impl {
 
     fn OnPreservedKey(&self, _pic: Ref<ITfContext>, _rguid: *const GUID) -> Result<BOOL> {
         Ok(BOOL::from(false))
+    }
+}
+
+impl ITfKeyTraceEventSink_Impl for TextService_Impl {
+    fn OnKeyTraceDown(&self, wparam: WPARAM, _lparam: LPARAM) -> Result<()> {
+        self.commit_traced_boundary(wparam.0 as u32);
+        Ok(())
+    }
+
+    fn OnKeyTraceUp(&self, _wparam: WPARAM, _lparam: LPARAM) -> Result<()> {
+        Ok(())
     }
 }
 
@@ -850,7 +912,7 @@ mod tests {
     use windows::Win32::UI::Input::KeyboardAndMouse::{VK_DELETE, VK_LEFT, VK_RETURN, VK_SPACE};
 
     #[test]
-    fn natural_boundary_keys_commit_then_pass() {
+    fn natural_boundary_keys_are_trace_commit_then_pass() {
         assert!(commit_then_pass_key(VK_RETURN.0 as u32));
         assert!(commit_then_pass_key(VK_LEFT.0 as u32));
         assert!(commit_then_pass_key(VK_DELETE.0 as u32));
