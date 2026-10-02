@@ -52,7 +52,15 @@ try {
         $RestartInputKey = $true
         Start-Sleep -Milliseconds 250
     }
-    if (Test-Path $DistDir) { Remove-Item $DistDir -Recurse -Force }
+    if (Test-Path $DistDir) {
+        $PreviousDist = $DistDir + "-loaded-" + (Get-Date -Format "yyyyMMdd-HHmmss")
+        Rename-Item -LiteralPath $DistDir -NewName (Split-Path $PreviousDist -Leaf)
+        try {
+            Remove-Item $PreviousDist -Recurse -Force -ErrorAction Stop
+        } catch {
+            Write-Host "Kept loaded previous runtime at $PreviousDist"
+        }
+    }
     Copy-Item $Stage $DistDir -Recurse -Force
     if (Test-Path $Zip) { Remove-Item $Zip -Force }
     Compress-Archive -Path (Join-Path $Stage "*") -DestinationPath $Zip

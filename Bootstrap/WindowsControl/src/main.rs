@@ -148,6 +148,25 @@ fn show_text_service_result(active: bool, installed_now: bool) {
 }
 
 #[cfg(windows)]
+fn bind_packaged_text_service() {
+    if !inputkey_windows_tsf::text_service_available() {
+        return;
+    }
+    let Ok(executable) = std::env::current_exe() else {
+        return;
+    };
+    let Some(directory) = executable.parent() else {
+        return;
+    };
+    let dll = directory.join("InputKeyTSF.dll");
+    let languages = directory.join("languages");
+    if !dll.is_file() || !languages.is_dir() {
+        return;
+    }
+    let _ = inputkey_windows_tsf::bind_text_service_dll(&dll);
+}
+
+#[cfg(windows)]
 fn install_text_service() {
     std::thread::spawn(|| {
         let apartment = ComApartment::sta();
@@ -172,6 +191,11 @@ fn main() {
     let tsf_com_ready = com_apartment.is_initialized();
     #[cfg(not(windows))]
     let tsf_com_ready = false;
+
+    #[cfg(windows)]
+    if tsf_com_ready {
+        bind_packaged_text_service();
+    }
 
     let catalog = Arc::new(Catalog::installed());
     let factory = engine_factory(Arc::clone(&catalog));

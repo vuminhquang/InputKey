@@ -12,6 +12,7 @@
 - Added capability-based fallback for keyboard-focused UI Automation text surfaces such as Windows Terminal: when TSF and writable ranges are unavailable, InputKey can keep composition through its isolated synthetic transport.
 - Moved correction timing into the language-independent root FSM: only the Space decision boundary offers the active language one correction pass. Vietnamese live typing stays sequential (`mor → mỏ`, `more → mỏe`), invalid speculative text rolls back on the next printable event, explicit repeat-cancel remains immediate (`exx → ex`), and only modifier intent may float at Space (`thuongwf → thường`) while base-letter order stays fixed (`mac`, `macos`, `mod`).
 - Split native language-pack finalization from boundary correction in language-pack ABI v2 so every language can independently define or omit its own correction policy.
+- Fixed Windows language switching after updates by rebinding the per-user TSF COM class to the packaged `InputKeyTSF.dll` before activation. Packaged rebuilds rotate any still-loaded previous runtime instead of leaving COM pointed at old `target` or legacy dist paths.
 - Updated Chrome/Edge WASM to use the same language catalog and root composition contract.
 
 # 5.0.0

@@ -94,6 +94,10 @@ fn register_com_class(dll_path: &Path) -> Result<()> {
     result
 }
 
+pub fn bind_text_service_dll(dll_path: &Path) -> Result<()> {
+    register_com_class(dll_path)
+}
+
 fn unregister_com_class() -> Result<()> {
     let path = wide_nul(&format!(r"Software\Classes\CLSID\{CLSID_INPUTKEY_STR}"));
     let code = unsafe { RegDeleteTreeW(HKEY_CURRENT_USER, PCWSTR(path.as_ptr())) };
@@ -124,7 +128,7 @@ pub fn register_text_service(dll_path: &Path) -> Result<()> {
         profiles
             .Register(&CLSID_INPUTKEY_TEXT_SERVICE)
             .map_err(|e| Error::new(e.code(), "TSF Register text service"))?;
-        let desc: Vec<u16> = "InputKey Vietnamese".encode_utf16().collect();
+        let desc: Vec<u16> = "InputKey".encode_utf16().collect();
         let icon: Vec<u16> = Vec::new();
         profiles
             .AddLanguageProfile(

@@ -27,6 +27,8 @@ For example, `dd` displays `đ`; pressing an arrow commits `đ` and then moves t
 
 Windows uses the TSF text service as the primary input path. Installing or updating the text service may require one UAC approval; normal typing and the tray app run as the current user. Applications that were already running when the text service was first installed may need to be restarted once so their TSF thread manager can load InputKey. This includes Windows Terminal if it was already open before InputKey's text service was installed.
 
+The packaged Windows runtime refreshes its per-user COM binding to the sibling `InputKeyTSF.dll` before TSF activation, so an update cannot keep pointing at an old build directory. Applications that already loaded an older TSF DLL keep that in-process image until they are restarted once.
+
 When TSF is unavailable for the focused target, InputKey probes target capabilities instead of routing by application name. It prefers owned native edit ranges, then UI Automation editable patterns, and uses an isolated synthetic transport only for compatible fallback surfaces such as Remote Desktop or custom Chromium render surfaces. Clipboard-backed paste remains a guarded secondary transport for supported native edits. Password and read-only fields are excluded, injected InputKey events are ignored by the hook, and clipboard restoration never overwrites a newer clipboard change made by another application.
 
 ## Typing behavior

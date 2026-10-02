@@ -1,8 +1,8 @@
 #[cfg(windows)]
 fn main() -> windows::core::Result<()> {
     use inputkey_windows_tsf::{
-        activate_text_service, disable_text_service, register_text_service, text_service_active,
-        text_service_available, unregister_text_service,
+        activate_text_service, bind_text_service_dll, disable_text_service, register_text_service,
+        text_service_active, text_service_available, unregister_text_service,
     };
     use std::path::PathBuf;
     use windows::Win32::System::Com::{CoInitializeEx, CoUninitialize, COINIT_APARTMENTTHREADED};
@@ -10,6 +10,7 @@ fn main() -> windows::core::Result<()> {
     let args: Vec<String> = std::env::args().collect();
     let unregister = args.iter().any(|arg| arg == "--unregister");
     let register_only = args.iter().any(|arg| arg == "--register-only");
+    let bind_only = args.iter().any(|arg| arg == "--bind-only");
     let activate_only = args.iter().any(|arg| arg == "--activate-only");
     let status = args.iter().any(|arg| arg == "--status");
     let disable = args.iter().any(|arg| arg == "--disable");
@@ -30,15 +31,8 @@ fn main() -> windows::core::Result<()> {
         return Ok(());
     }
 
-    let result = if unregister {
-        unregister_text_service()
-    } else if disable {
-        disable_text_service()
-    } else if activate_only {
-        activate_text_service()
-    } else {
-        let dll = args
-            .iter()
+    let dll = || {
+        args.iter()
             .position(|arg| arg == "--dll")
             .and_then(|index| args.get(index + 1))
             .map(PathBuf::from)
@@ -48,12 +42,21 @@ fn main() -> windows::core::Result<()> {
                     .parent()
                     .expect("registrar directory")
                     .join("InputKeyTSF.dll")
-            });
-        if register_only {
-            register_text_service(&dll)
-        } else {
-            register_text_service(&dll).and_then(|_| activate_text_service())
-        }
+            })
+    };
+
+    let result = if unregister {
+        unregister_text_service()
+    } else if disable {
+        disable_text_service()
+    } else if activate_only {
+        activate_text_service()
+    } else if bind_only {
+        bind_text_service_dll(&dll())
+    } else if register_only {
+        register_text_service(&dll())
+    } else {
+        register_text_service(&dll()).and_then(|_| activate_text_service())
     };
 
     unsafe {

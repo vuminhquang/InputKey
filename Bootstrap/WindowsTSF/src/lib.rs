@@ -55,6 +55,24 @@ mod windows_dll {
     pub extern "system" fn DllCanUnloadNow() -> HRESULT {
         can_unload_now()
     }
+
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+
+        #[test]
+        fn tsf_factory_selects_french_language() {
+            let config = EngineConfig {
+                language_id: "fr".into(),
+                language: inputkey_core_abstractions::LanguageConfig::new("telex"),
+            };
+
+            let factory = engine_factory();
+            let mut engine = factory(config);
+            assert_eq!(engine.type_key('e'), "e");
+            assert_eq!(engine.type_key('e'), "ê");
+        }
+    }
 }
 
 #[cfg(not(windows))]

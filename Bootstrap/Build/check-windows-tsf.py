@@ -33,6 +33,23 @@ for required in [
     if required not in service:
         errors.append(f"WindowsTSF service missing lifecycle primitive: {required}")
 
+registration = (ROOT / "Implementations" / "WindowsTSF" / "src" / "registration.rs").read_text(encoding="utf-8")
+registrar = (ROOT / "Bootstrap" / "WindowsTSF" / "src" / "bin" / "register.rs").read_text(encoding="utf-8")
+control = (ROOT / "Bootstrap" / "WindowsControl" / "src" / "main.rs").read_text(encoding="utf-8")
+build = (ROOT / "Bootstrap" / "Build" / "build-windows.ps1").read_text(encoding="utf-8")
+bootstrap_tsf = (ROOT / "Bootstrap" / "WindowsTSF" / "src" / "lib.rs").read_text(encoding="utf-8")
+
+for label, text, required in [
+    ("registration", registration, "bind_text_service_dll"),
+    ("registrar", registrar, "--bind-only"),
+    ("packaged control", control, "bind_packaged_text_service"),
+    ("packaged control", control, 'directory.join("languages")'),
+    ("Windows build", build, "-loaded-"),
+    ("TSF bootstrap", bootstrap_tsf, "tsf_factory_selects_french_language"),
+]:
+    if required not in text:
+        errors.append(f"{label} missing canonical multilingual TSF invariant: {required}")
+
 if errors:
     print("Windows TSF contract violation:")
     for error in errors:
