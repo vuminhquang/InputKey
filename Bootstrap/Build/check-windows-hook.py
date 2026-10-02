@@ -190,6 +190,31 @@ if "decision_boundary" not in transition:
         "Windows compatibility check failed: delimiter semantics bypass the root engine"
     )
 
+owned_write = re.search(
+    r"(?s)let ok = owned\.as_mut\(\).*?range\.replace\(.*?if !ok \{(.*?)\}\s*else if remains_active",
+    hook,
+)
+if not owned_write:
+    raise SystemExit(
+        "Windows compatibility check failed: owned transport write branch is missing"
+    )
+if "replay_literal" in owned_write.group(1):
+    raise SystemExit(
+        "Windows compatibility check failed: a key is replayed after an owned transport "
+        "already attempted to mutate the target"
+    )
+
+for required in (
+    "CurrentValue",
+    "actual != next",
+    "Clone(caret anchor)",
+):
+    if required not in uia:
+        raise SystemExit(
+            "Windows compatibility check failed: UI Automation write/caret invariant missing: "
+            + required
+        )
+
 print(
     "Windows compatibility transport check passed: callback stays nonblocking; "
     "resolver prefers native range/UIA and isolates synthetic fallback."

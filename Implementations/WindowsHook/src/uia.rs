@@ -225,10 +225,14 @@ impl AutomationText {
             return Err("UI Automation control did not accept the requested text".into());
         }
 
-        self.place_caret(
+        // At this point the requested value is already verified in the target.
+        // Caret placement is a secondary refinement: failing it must never make the
+        // caller replay the physical key, otherwise one keystroke is applied twice.
+        let _ = self.place_caret(
             &owned.element,
             owned.prefix.chars().count() + text.chars().count(),
-        )
+        );
+        Ok(())
     }
 
     fn place_caret(&self, element: &IUIAutomationElement, offset: usize) -> Result<(), String> {
@@ -254,11 +258,19 @@ impl AutomationText {
         if moved < offset as i32 {
             return Err("could not place caret at requested position".into());
         }
+        // Do not use the same COM range as both destination and source.
+        // Some XAML/RichEdit providers (notably Windows Search) reject or mis-handle
+        // that self-referential collapse.
+        let anchor = unsafe {
+            range
+                .Clone()
+                .map_err(|error| format!("Clone(caret anchor) failed: {error}"))?
+        };
         unsafe {
             range
                 .MoveEndpointByRange(
                     TextPatternRangeEndpoint_End,
-                    &range,
+                    &anchor,
                     TextPatternRangeEndpoint_Start,
                 )
                 .map_err(|error| format!("Collapse caret range failed: {error}"))?;

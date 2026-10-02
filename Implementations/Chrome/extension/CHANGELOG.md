@@ -7,6 +7,7 @@
 - Reworked Windows compatibility input into capability-based native range, UI Automation, and isolated synthetic transports.
 - Added compatibility support for custom Chromium render surfaces such as Zalo without app-specific routing.
 - Fixed Windows Start/Search compatibility by sharing one STA worker apartment between OLE clipboard fallback and UI Automation.
+- Prevented compatibility transports from replaying a physical key after a target write already occurred, eliminating duplicated characters in Windows Search.
 - Updated Chrome/Edge WASM to use the same language catalog and root composition contract.
 
 # 5.0.0

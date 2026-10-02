@@ -412,12 +412,15 @@ fn worker(shared: Arc<Shared>, factory: EngineFactory) {
                         range.replace(automation.as_ref(), clipboard.as_ref(), &text)
                     });
                     if !ok {
+                        // An owned transport may have mutated the target before its
+                        // post-write verification failed. The physical key was already
+                        // suppressed by the hook, so replaying it here can duplicate one
+                        // keystroke into two. Drop ownership and let the next physical
+                        // event start a fresh composition instead.
                         engine.reset();
                         owned = None;
                         shared.active.store(false, Ordering::Release);
                         shared.active_target.store(0, Ordering::Release);
-                        let literal = ch.to_string();
-                        let _ = crate::synthetic::replay_literal(target, &literal);
                     } else if remains_active {
                         shared.active.store(true, Ordering::Release);
                     } else {
