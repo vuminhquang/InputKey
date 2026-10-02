@@ -8,6 +8,7 @@
 - Added compatibility support for custom Chromium render surfaces such as Zalo without app-specific routing.
 - Fixed Windows Start/Search compatibility by sharing one STA worker apartment between OLE clipboard fallback and UI Automation.
 - Prevented compatibility transports from replaying a physical key after a target write already occurred, eliminating duplicated characters in Windows Search.
+- Fixed native dynamic language packs so each key/backspace/escape/finalize event is applied exactly once; this removes truncated UTF-8 replacement glyphs such as broken `dd → đ` in Windows Search.
 - Updated Chrome/Edge WASM to use the same language catalog and root composition contract.
 
 # 5.0.0

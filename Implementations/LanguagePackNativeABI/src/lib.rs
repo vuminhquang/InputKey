@@ -12,6 +12,9 @@ pub struct LanguagePackApiV1 {
     pub create: unsafe extern "C" fn(config_json: *const u8, len: usize) -> u64,
     pub destroy: unsafe extern "C" fn(handle: u64),
     pub accepts_key: unsafe extern "C" fn(handle: u64, key_utf8: *const u8, len: usize) -> i32,
+    // Mutating functions execute exactly once per call, even when the output buffer is null.
+    // Callers must not use the usual two-pass size/read pattern on them; mutate once,
+    // then query rendered/state through the non-mutating functions below.
     pub key_utf8: unsafe extern "C" fn(
         handle: u64,
         key_utf8: *const u8,

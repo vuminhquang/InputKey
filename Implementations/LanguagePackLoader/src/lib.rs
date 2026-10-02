@@ -24,6 +24,11 @@ fn read_call(call: impl Fn(*mut u8, usize) -> usize) -> String {
     String::from_utf8_lossy(&buffer[..actual]).into_owned()
 }
 
+fn mutate_then_read(mutate: impl FnOnce(), read: impl Fn(*mut u8, usize) -> usize) -> String {
+    mutate();
+    read_call(read)
+}
+
 fn metadata_from_json(text: &str) -> Result<LanguageMetadata, String> {
     let value: Value = serde_json::from_str(text).map_err(|e| e.to_string())?;
     let s = |name: &str| {
@@ -165,8 +170,24 @@ struct DynamicMachine {
 }
 
 impl DynamicMachine {
-    fn command(&self, f: unsafe extern "C" fn(u64, *mut u8, usize) -> usize) -> String {
+    fn query(&self, f: unsafe extern "C" fn(u64, *mut u8, usize) -> usize) -> String {
         read_call(|out, cap| unsafe { f(self.handle, out, cap) })
+    }
+
+    fn mutate_then_render(
+        &mut self,
+        f: unsafe extern "C" fn(u64, *mut u8, usize) -> usize,
+    ) -> String {
+        // Mutating ABI calls execute even when no output buffer is supplied.
+        // Calling them twice for a two-pass size/read sequence would apply one
+        // physical event twice. Execute exactly once, then read rendered state
+        // through the non-mutating query.
+        mutate_then_read(
+            || unsafe {
+                f(self.handle, std::ptr::null_mut(), 0);
+            },
+            |out, cap| unsafe { (self.api.rendered)(self.handle, out, cap) },
+        )
     }
 }
 
@@ -185,24 +206,27 @@ impl LanguageMachinePort for DynamicMachine {
     fn type_key(&mut self, key: char) -> String {
         let mut b = [0u8; 4];
         let s = key.encode_utf8(&mut b);
-        read_call(|out, cap| unsafe {
-            (self.api.key_utf8)(self.handle, s.as_ptr(), s.len(), out, cap)
-        })
+        mutate_then_read(
+            || unsafe {
+                (self.api.key_utf8)(self.handle, s.as_ptr(), s.len(), std::ptr::null_mut(), 0);
+            },
+            |out, cap| unsafe { (self.api.rendered)(self.handle, out, cap) },
+        )
     }
     fn backspace(&mut self) -> String {
-        self.command(self.api.backspace)
+        self.mutate_then_render(self.api.backspace)
     }
     fn escape(&mut self) -> String {
-        self.command(self.api.escape)
+        self.mutate_then_render(self.api.escape)
     }
     fn finalize(&mut self) -> String {
-        self.command(self.api.finalize)
+        self.mutate_then_render(self.api.finalize)
     }
     fn reset(&mut self) {
         unsafe { (self.api.reset)(self.handle) }
     }
     fn state(&self) -> LanguageState {
-        let text = self.command(self.api.state_json);
+        let text = self.query(self.api.state_json);
         let v: Value = serde_json::from_str(&text).unwrap_or(Value::Null);
         let get = |n: &str| {
             v.get(n)
@@ -218,10 +242,10 @@ impl LanguageMachinePort for DynamicMachine {
         }
     }
     fn rendered(&self) -> String {
-        self.command(self.api.rendered)
+        self.query(self.api.rendered)
     }
     fn raw(&self) -> String {
-        self.command(self.api.raw)
+        self.query(self.api.raw)
     }
     fn history_active(&self) -> bool {
         unsafe { (self.api.has_history)(self.handle) != 0 }
@@ -318,4 +342,32 @@ pub fn discover() -> Vec<Arc<dyn LanguagePackPort>> {
         }
     }
     out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::cell::Cell;
+
+    #[test]
+    fn mutating_pack_call_executes_once_before_render_query() {
+        let mutations = Cell::new(0usize);
+        let rendered = "đ".as_bytes();
+
+        let text = mutate_then_read(
+            || mutations.set(mutations.get() + 1),
+            |out, cap| {
+                if !out.is_null() && cap > rendered.len() {
+                    unsafe {
+                        std::ptr::copy_nonoverlapping(rendered.as_ptr(), out, rendered.len());
+                        *out.add(rendered.len()) = 0;
+                    }
+                }
+                rendered.len()
+            },
+        );
+
+        assert_eq!(mutations.get(), 1);
+        assert_eq!(text, "đ");
+    }
 }
