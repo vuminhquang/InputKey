@@ -8,8 +8,8 @@ use windows::{
         UI::Accessibility::{
             CUIAutomation8, IUIAutomation, IUIAutomationElement, IUIAutomationTextPattern,
             IUIAutomationTextRange, IUIAutomationValuePattern, TextPatternRangeEndpoint_End,
-            TextPatternRangeEndpoint_Start, TextUnit_Character, UIA_EditControlTypeId,
-            UIA_TextPatternId, UIA_ValuePatternId,
+            TextPatternRangeEndpoint_Start, TextUnit_Character, UIA_DocumentControlTypeId,
+            UIA_EditControlTypeId, UIA_TextControlTypeId, UIA_TextPatternId, UIA_ValuePatternId,
         },
     },
 };
@@ -57,6 +57,73 @@ impl AutomationText {
             automation,
             com_initialized: true,
         })
+    }
+
+    pub fn focused_keyboard_text_surface(&self, process_id: u32) -> Result<bool, CaptureError> {
+        let element = unsafe {
+            self.automation
+                .GetFocusedElement()
+                .map_err(|_| CaptureError::Unsupported)?
+        };
+
+        let actual_process = unsafe {
+            element
+                .CurrentProcessId()
+                .map_err(|_| CaptureError::Unsupported)?
+        };
+        if actual_process != process_id as i32 {
+            return Ok(false);
+        }
+
+        let has_focus = unsafe {
+            element
+                .CurrentHasKeyboardFocus()
+                .map_err(|_| CaptureError::Unsupported)?
+                .as_bool()
+        };
+        let keyboard_focusable = unsafe {
+            element
+                .CurrentIsKeyboardFocusable()
+                .map_err(|_| CaptureError::Unsupported)?
+                .as_bool()
+        };
+        let enabled = unsafe {
+            element
+                .CurrentIsEnabled()
+                .map_err(|_| CaptureError::Unsupported)?
+                .as_bool()
+        };
+        if !has_focus || !keyboard_focusable || !enabled {
+            return Ok(false);
+        }
+
+        if unsafe {
+            element
+                .CurrentIsPassword()
+                .map_err(|_| CaptureError::Unsupported)?
+                .as_bool()
+        } {
+            return Err(CaptureError::Denied);
+        }
+
+        let control_type = unsafe {
+            element
+                .CurrentControlType()
+                .map_err(|_| CaptureError::Unsupported)?
+        };
+        if control_type != UIA_EditControlTypeId
+            && control_type != UIA_TextControlTypeId
+            && control_type != UIA_DocumentControlTypeId
+        {
+            return Ok(false);
+        }
+
+        let _: IUIAutomationTextPattern = unsafe {
+            element
+                .GetCurrentPatternAs(UIA_TextPatternId)
+                .map_err(|_| CaptureError::Unsupported)?
+        };
+        Ok(true)
     }
 
     pub fn capture_focused(

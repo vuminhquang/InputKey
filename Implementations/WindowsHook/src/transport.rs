@@ -119,9 +119,15 @@ fn is_chromium_surface(target: HWND) -> bool {
         || root_class == "chrome_widgetwin_1"
 }
 
+fn is_automation_surface_name(class: &str) -> bool {
+    let class = class.to_ascii_lowercase();
+    class == "windows.ui.core.corewindow"
+        || class == "windows.ui.input.inputsite.windowclass"
+        || class.contains("xaml")
+}
+
 fn is_automation_surface(target: HWND) -> bool {
-    let class = class_name(target).to_ascii_lowercase();
-    class == "windows.ui.core.corewindow" || class.contains("xaml")
+    is_automation_surface_name(&class_name(target))
 }
 
 pub fn thread_has_tsf(target: HWND) -> bool {
@@ -181,6 +187,7 @@ pub fn capture(target: HWND, automation: Option<&uia::AutomationText>) -> Captur
             .unwrap_or(Capture::Denied);
     }
 
+    let mut keyboard_text_surface = false;
     if let Some(automation) = automation {
         let mut process_id = 0u32;
         unsafe {
@@ -191,9 +198,14 @@ pub fn capture(target: HWND, automation: Option<&uia::AutomationText>) -> Captur
             Err(uia::CaptureError::Denied) => return Capture::Denied,
             Err(uia::CaptureError::Unsupported) => {}
         }
+        match automation.focused_keyboard_text_surface(process_id) {
+            Ok(supported) => keyboard_text_surface = supported,
+            Err(uia::CaptureError::Denied) => return Capture::Denied,
+            Err(uia::CaptureError::Unsupported) => {}
+        }
     }
 
-    if is_chromium_surface(target) || is_automation_surface(target) {
+    if keyboard_text_surface || is_chromium_surface(target) {
         return synthetic::OwnedSynthetic::capture(target)
             .map(|target| {
                 Capture::Ready(OwnedTransport::Synthetic {
@@ -216,5 +228,12 @@ mod tests {
         for class in ["RAIL_WINDOW", "TscShellContainerClass", "TscAxHostClass"] {
             assert!(is_remote_window_class(class));
         }
+    }
+
+    #[test]
+    fn system_input_site_is_admitted_for_worker_capability_probe() {
+        assert!(is_automation_surface_name(
+            "Windows.UI.Input.InputSite.WindowClass"
+        ));
     }
 }

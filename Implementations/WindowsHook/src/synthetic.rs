@@ -13,6 +13,7 @@ const INPUTKEY_SYNTHETIC_TAG: usize = 0x494b_5359;
 
 #[derive(Clone, Copy)]
 pub struct OwnedSynthetic {
+    owner: HWND,
     root: HWND,
 }
 
@@ -22,11 +23,14 @@ impl OwnedSynthetic {
         if root.is_null() || unsafe { IsWindow(root) } == 0 {
             return None;
         }
-        Some(Self { root })
+        Some(Self {
+            owner: target,
+            root,
+        })
     }
 
     pub fn target(&self) -> isize {
-        self.root as isize
+        self.owner as isize
     }
 
     pub fn replace(&self, old: &str, new: &str) -> Result<(), String> {

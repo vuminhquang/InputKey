@@ -110,10 +110,14 @@ for required in (
     "CurrentIsPassword",
     "CurrentIsReadOnly",
     "CurrentHasKeyboardFocus",
+    "CurrentIsKeyboardFocusable",
+    "CurrentIsEnabled",
     "CurrentProcessId",
     "GetFocusedElement",
     "ValuePattern",
     "TextPattern",
+    "UIA_TextControlTypeId",
+    "UIA_DocumentControlTypeId",
 ):
     if required not in uia:
         raise SystemExit(
@@ -125,6 +129,8 @@ for required in (
     "thread_has_tsf",
     "native::OwnedRange::capture",
     "capture_focused",
+    "focused_keyboard_text_surface",
+    "windows.ui.input.inputsite.windowclass",
     "OwnedTransport::Automation",
     "OwnedTransport::Synthetic",
     "chrome_widgetwin_1",
@@ -153,6 +159,8 @@ for required in (
     "GetForegroundWindow",
     "GetAncestor",
     "INPUTKEY_SYNTHETIC_TAG",
+    "owner: HWND",
+    "root: HWND",
 ):
     if required not in synthetic:
         raise SystemExit(
