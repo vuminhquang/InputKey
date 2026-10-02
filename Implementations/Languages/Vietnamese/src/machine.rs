@@ -940,14 +940,52 @@ fn telex_encoding(rendered: &str) -> String {
     out
 }
 
-fn key_signature(text: &str) -> String {
+fn key_multiset_signature(text: &str) -> String {
     let mut chars: Vec<char> = text.chars().flat_map(char::to_lowercase).collect();
     chars.sort_unstable();
     chars.into_iter().collect()
 }
 
-fn telex_intent_index() -> &'static HashMap<String, Vec<String>> {
-    static INDEX: OnceLock<HashMap<String, Vec<String>>> = OnceLock::new();
+#[derive(Clone)]
+struct TelexIntentCandidate {
+    rendered: String,
+    base: Vec<u8>,
+    modifiers: [u8; 26],
+    encoded_len: usize,
+}
+
+fn telex_intent_candidate(rendered: String) -> Option<TelexIntentCandidate> {
+    let base_text: String = rendered.chars().map(lower_base).collect();
+    let encoded = telex_encoding(&rendered);
+    if !base_text.bytes().all(|b| b.is_ascii_lowercase())
+        || !encoded.bytes().all(|b| b.is_ascii_lowercase())
+    {
+        return None;
+    }
+
+    let mut modifiers = [0u8; 26];
+    for byte in encoded.bytes() {
+        let index = (byte - b'a') as usize;
+        modifiers[index] = modifiers[index].saturating_add(1);
+    }
+    for byte in base_text.bytes() {
+        let index = (byte - b'a') as usize;
+        if modifiers[index] == 0 {
+            return None;
+        }
+        modifiers[index] -= 1;
+    }
+
+    Some(TelexIntentCandidate {
+        rendered,
+        base: base_text.into_bytes(),
+        modifiers,
+        encoded_len: encoded.len(),
+    })
+}
+
+fn telex_intent_index() -> &'static HashMap<String, Vec<TelexIntentCandidate>> {
+    static INDEX: OnceLock<HashMap<String, Vec<TelexIntentCandidate>>> = OnceLock::new();
     INDEX.get_or_init(|| {
         let tones = [
             Tone::None,
@@ -957,7 +995,7 @@ fn telex_intent_index() -> &'static HashMap<String, Vec<String>> {
             Tone::Tilde,
             Tone::Dot,
         ];
-        let mut index: HashMap<String, Vec<String>> = HashMap::new();
+        let mut index: HashMap<String, Vec<TelexIntentCandidate>> = HashMap::new();
         for skeleton in &grammar().valid_skeletons {
             let chars: Vec<char> = skeleton.chars().collect();
             for tone in tones {
@@ -965,15 +1003,93 @@ fn telex_intent_index() -> &'static HashMap<String, Vec<String>> {
                 if !is_valid_syllable(&rendered) {
                     continue;
                 }
-                let signature = key_signature(&telex_encoding(&rendered));
+                let encoding = telex_encoding(&rendered);
+                let signature = key_multiset_signature(&encoding);
+                let Some(candidate) = telex_intent_candidate(rendered) else {
+                    continue;
+                };
                 let candidates = index.entry(signature).or_default();
-                if !candidates.contains(&rendered) {
-                    candidates.push(rendered);
+                if !candidates
+                    .iter()
+                    .any(|existing| existing.rendered == candidate.rendered)
+                {
+                    candidates.push(candidate);
                 }
             }
         }
         index
     })
+}
+
+fn ordered_intent_assignment(
+    raw: &[u8],
+    base: &[u8],
+    raw_index: usize,
+    base_index: usize,
+    modifiers: &mut [u8; 26],
+    require_complete: bool,
+) -> bool {
+    if raw_index == raw.len() {
+        return !require_complete
+            || (base_index == base.len() && modifiers.iter().all(|count| *count == 0));
+    }
+
+    let key = raw[raw_index];
+    if base_index < base.len()
+        && key == base[base_index]
+        && ordered_intent_assignment(
+            raw,
+            base,
+            raw_index + 1,
+            base_index + 1,
+            modifiers,
+            require_complete,
+        )
+    {
+        return true;
+    }
+
+    let modifier_index = (key - b'a') as usize;
+    if modifiers[modifier_index] > 0 {
+        modifiers[modifier_index] -= 1;
+        let matched = ordered_intent_assignment(
+            raw,
+            base,
+            raw_index + 1,
+            base_index,
+            modifiers,
+            require_complete,
+        );
+        modifiers[modifier_index] += 1;
+        if matched {
+            return true;
+        }
+    }
+
+    false
+}
+
+fn ordered_telex_intent_matches(
+    raw: &str,
+    candidate: &TelexIntentCandidate,
+    require_complete: bool,
+) -> bool {
+    if raw.is_empty() || !raw.chars().all(|c| c.is_ascii_alphabetic()) {
+        return false;
+    }
+    let raw = raw.to_ascii_lowercase();
+    if raw.len() > candidate.encoded_len {
+        return false;
+    }
+    let mut modifiers = candidate.modifiers;
+    ordered_intent_assignment(
+        raw.as_bytes(),
+        &candidate.base,
+        0,
+        0,
+        &mut modifiers,
+        require_complete,
+    )
 }
 
 fn apply_input_case(raw: &str, rendered: &str) -> String {
@@ -1003,7 +1119,7 @@ fn intent_preference(raw: &str, rendered: &str) -> isize {
     if lower_raw.contains('w') {
         if skeleton.contains("ươ") {
             score += 300;
-        } else if skeleton.contains('ư') || skeleton.contains('ơ') || skeleton.contains('ă') {
+        } else if skeleton.contains('ă') || skeleton.contains('ơ') || skeleton.contains('ư') {
             score += 20;
         }
     }
@@ -1017,13 +1133,19 @@ fn resolve_telex_intent(raw: &str) -> Option<String> {
     if raw.len() < 3 || !raw.chars().all(|c| c.is_ascii_alphabetic()) {
         return None;
     }
-    let signature = key_signature(raw);
+    let signature = key_multiset_signature(raw);
     let candidates = telex_intent_index().get(&signature)?;
-    let mut ranked: Vec<(isize, &String)> = candidates
+    let mut ranked: Vec<(isize, &TelexIntentCandidate)> = candidates
         .iter()
-        .map(|candidate| (intent_preference(raw, candidate), candidate))
+        .filter(|candidate| ordered_telex_intent_matches(raw, candidate, true))
+        .map(|candidate| (intent_preference(raw, &candidate.rendered), candidate))
         .collect();
-    ranked.sort_by(|left, right| right.0.cmp(&left.0).then_with(|| left.1.cmp(right.1)));
+    ranked.sort_by(|left, right| {
+        right
+            .0
+            .cmp(&left.0)
+            .then_with(|| left.1.rendered.cmp(&right.1.rendered))
+    });
     let (best_score, best) = ranked.first().copied()?;
     if ranked
         .get(1)
@@ -1031,40 +1153,18 @@ fn resolve_telex_intent(raw: &str) -> Option<String> {
     {
         return None;
     }
-    Some(apply_input_case(raw, best))
-}
-
-fn signature_contains(candidate: &str, raw: &str) -> bool {
-    let mut needed = [0u8; 26];
-    let mut available = [0u8; 26];
-    for c in raw.chars().flat_map(char::to_lowercase) {
-        if !c.is_ascii_lowercase() {
-            return false;
-        }
-        needed[(c as u8 - b'a') as usize] = needed[(c as u8 - b'a') as usize].saturating_add(1);
-    }
-    for c in candidate.chars() {
-        if c.is_ascii_lowercase() {
-            available[(c as u8 - b'a') as usize] =
-                available[(c as u8 - b'a') as usize].saturating_add(1);
-        }
-    }
-    needed
-        .iter()
-        .zip(available.iter())
-        .all(|(required, present)| required <= present)
+    Some(apply_input_case(raw, &best.rendered))
 }
 
 fn telex_intent_can_recover(raw: &str) -> bool {
     if raw.len() < 3 || !raw.chars().all(|c| c.is_ascii_alphabetic()) {
         return false;
     }
-    let raw_len = raw.chars().count();
-    telex_intent_index().keys().any(|signature| {
-        let candidate_len = signature.chars().count();
-        candidate_len >= raw_len
-            && candidate_len - raw_len <= 3
-            && signature_contains(signature, raw)
+    let raw_len = raw.len();
+    telex_intent_index().values().flatten().any(|candidate| {
+        candidate.encoded_len >= raw_len
+            && candidate.encoded_len - raw_len <= 3
+            && ordered_telex_intent_matches(raw, candidate, false)
     })
 }
 
@@ -1345,7 +1445,7 @@ impl Machine {
             }
         }
 
-        if self.options.auto_restore && !analysis.viable {
+        if self.options.auto_restore && !analysis.viable && !self.transformed {
             self.mode = Mode::RawLocked;
             self.rendered = self.fallback.clone();
         } else if !self.raw.is_empty() {

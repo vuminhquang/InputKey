@@ -464,6 +464,29 @@ fn word_boundary_adjusts_but_natural_ime_boundary_preserves_visible_text() {
 }
 
 #[test]
+fn smart_correction_preserves_base_order_and_only_floats_modifiers() {
+    let opts = options("telex", false, true);
+
+    for raw in ["mac", "macos", "mod"] {
+        let mut machine = Machine::new(opts.clone(), Some(Box::new(Words)));
+        for key in raw.chars() {
+            machine.type_key(key);
+        }
+        assert_eq!(machine.rendered_text(), raw, "{raw} live");
+        assert_eq!(machine.finalize(), raw, "{raw} final");
+    }
+
+    for raw in ["thuongwf", "thuongfw", "thuowngf"] {
+        let mut machine = Machine::new(opts.clone(), Some(Box::new(Words)));
+        for key in raw.chars() {
+            machine.type_key(key);
+        }
+        assert_eq!(machine.rendered_text(), "thường", "{raw} live");
+        assert_eq!(machine.finalize(), "thường", "{raw} final");
+    }
+}
+
+#[test]
 fn smart_correction_can_be_disabled() {
     let mut opts = options("telex", false, true);
     opts.smart_correction = false;
