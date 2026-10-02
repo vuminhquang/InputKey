@@ -28,6 +28,7 @@ pub enum Phase {
     Coda,
     Complete,
     PendingShape,
+    PendingValidation,
     Dead,
 }
 
@@ -66,6 +67,7 @@ struct Snapshot {
     tone_fallback_index: isize,
     tone_was_bare_vowel: bool,
     transformed: bool,
+    correction_blocked: bool,
     ambiguous: bool,
     ambig_raw: String,
     ambig_cancel: String,
@@ -78,7 +80,6 @@ enum FsmEvent {
     Key(char),
     Backspace,
     Escape,
-    Finalize,
     CommitBoundary,
     CommitDisplayed,
     CommitRawBoundary,
@@ -98,6 +99,7 @@ pub struct Machine {
     tone_fallback_index: isize,
     tone_was_bare_vowel: bool,
     transformed: bool,
+    correction_blocked: bool,
     ambiguous: bool,
     ambig_raw: String,
     ambig_cancel: String,
@@ -796,6 +798,12 @@ fn valid_onset_nucleus(onset: &str, nucleus: &str) -> bool {
     if onset == "qu" && first == 'u' {
         return false;
     }
+    // In the oe nucleus, the leading o carries the /w/ medial. Vietnamese does
+    // not combine that medial with a labial onset, so forms such as moe are not
+    // valid syllable skeletons while khoe, hoe, loe, xoe, ... remain.
+    if nucleus.starts_with("oe") && matches!(onset, "b" | "m" | "p" | "ph" | "v") {
+        return false;
+    }
     if onset == "k" && !"eiy".contains(first) {
         return false;
     }
@@ -1156,18 +1164,6 @@ fn resolve_telex_intent(raw: &str) -> Option<String> {
     Some(apply_input_case(raw, &best.rendered))
 }
 
-fn telex_intent_can_recover(raw: &str) -> bool {
-    if raw.len() < 3 || !raw.chars().all(|c| c.is_ascii_alphabetic()) {
-        return false;
-    }
-    let raw_len = raw.len();
-    telex_intent_index().values().flatten().any(|candidate| {
-        candidate.encoded_len >= raw_len
-            && candidate.encoded_len - raw_len <= 3
-            && ordered_telex_intent_matches(raw, candidate, false)
-    })
-}
-
 #[derive(Clone, Copy)]
 struct Analysis {
     viable: bool,
@@ -1328,6 +1324,7 @@ impl Machine {
             tone_fallback_index: -1,
             tone_was_bare_vowel: false,
             transformed: false,
+            correction_blocked: false,
             ambiguous: false,
             ambig_raw: String::new(),
             ambig_cancel: String::new(),
@@ -1350,6 +1347,7 @@ impl Machine {
         self.tone_fallback_index = -1;
         self.tone_was_bare_vowel = false;
         self.transformed = false;
+        self.correction_blocked = false;
         self.ambiguous = false;
         self.ambig_raw.clear();
         self.ambig_cancel.clear();
@@ -1370,6 +1368,7 @@ impl Machine {
             tone_fallback_index: self.tone_fallback_index,
             tone_was_bare_vowel: self.tone_was_bare_vowel,
             transformed: self.transformed,
+            correction_blocked: self.correction_blocked,
             ambiguous: self.ambiguous,
             ambig_raw: self.ambig_raw.clone(),
             ambig_cancel: self.ambig_cancel.clone(),
@@ -1390,6 +1389,7 @@ impl Machine {
         self.tone_fallback_index = snapshot.tone_fallback_index;
         self.tone_was_bare_vowel = snapshot.tone_was_bare_vowel;
         self.transformed = snapshot.transformed;
+        self.correction_blocked = snapshot.correction_blocked;
         self.ambiguous = snapshot.ambiguous;
         self.ambig_raw = snapshot.ambig_raw;
         self.ambig_cancel = snapshot.ambig_cancel;
@@ -1426,26 +1426,13 @@ impl Machine {
         let analysis = analyze_transducer(&self.rendered);
         self.phase = analysis.phase;
 
-        let smart_telex =
-            self.options.smart_correction && self.options.method.eq_ignore_ascii_case("telex");
-        if smart_telex {
-            if let Some(resolved) = resolve_telex_intent(&self.raw) {
-                let stronger_intent = !analysis.viable
-                    || (analysis.complete
-                        && intent_preference(&self.raw, &resolved)
-                            > intent_preference(&self.raw, &self.rendered));
-                if resolved != self.rendered && stronger_intent {
-                    return self.adopt_smart_candidate(resolved);
-                }
-            }
-            if !analysis.viable && telex_intent_can_recover(&self.raw) {
-                self.mode = Mode::ViCandidate;
-                self.phase = Phase::PendingShape;
-                return self.rendered.clone();
-            }
-        }
-
-        if self.options.auto_restore && !analysis.viable && !self.transformed {
+        if !analysis.viable && self.transformed {
+            // The current event may leave a speculative Telex rendering that is
+            // not a valid Vietnamese prefix. Keep it visible for this event only;
+            // the next printable event will fall back to the physical raw stream.
+            self.mode = Mode::ViCandidate;
+            self.phase = Phase::PendingValidation;
+        } else if self.options.auto_restore && !analysis.viable {
             self.mode = Mode::RawLocked;
             self.rendered = self.fallback.clone();
         } else if !self.raw.is_empty() {
@@ -1483,6 +1470,7 @@ impl Machine {
 
     fn lock_literal_escape(&mut self) {
         self.fallback = drop_last_rune(&self.fallback);
+        self.correction_blocked = true;
         self.mode = Mode::RawLocked;
         self.phase = Phase::Dead;
         self.rendered = self.fallback.clone();
@@ -1594,6 +1582,7 @@ impl Machine {
     }
 
     fn finish_explicit_cancel(&mut self) {
+        self.correction_blocked = true;
         self.ambiguous = false;
         self.ambig_raw.clear();
         self.ambig_cancel.clear();
@@ -1835,6 +1824,16 @@ impl Machine {
 
     fn apply_key(&mut self, key: char) -> String {
         self.history.push(self.capture());
+
+        if self.phase == Phase::PendingValidation {
+            self.mode = Mode::RawLocked;
+            self.phase = Phase::Dead;
+            self.rendered = self.fallback.clone();
+            self.chars = self.fallback.chars().collect();
+            self.clear_tone();
+            self.transformed = false;
+        }
+
         self.raw.push(key);
 
         if self.ambiguous {
@@ -1896,6 +1895,7 @@ impl Machine {
             self.phase = Phase::Dead;
             return self.rendered.clone();
         }
+
         self.render_candidate()
     }
 
@@ -1909,6 +1909,7 @@ impl Machine {
     }
 
     fn apply_escape(&mut self) -> String {
+        self.correction_blocked = true;
         self.mode = Mode::RawLocked;
         self.phase = Phase::Dead;
         if self.ambiguous && !self.ambig_raw.is_empty() {
@@ -1947,6 +1948,29 @@ impl Machine {
             self.rendered = self.fallback.clone();
         }
         self.rendered.clone()
+    }
+
+    fn apply_correct_boundary(&mut self) -> String {
+        if self.raw.is_empty() {
+            return String::new();
+        }
+
+        // Explicit literal/cancel states have already made their decision. A
+        // boundary corrector must never reinterpret them as another language
+        // candidate.
+        if self.ambiguous || self.correction_blocked {
+            return self.apply_finalize();
+        }
+
+        if self.options.smart_correction && self.options.method.eq_ignore_ascii_case("telex") {
+            if let Some(corrected) = resolve_telex_intent(&self.raw) {
+                if corrected != self.rendered {
+                    return self.adopt_smart_candidate(corrected);
+                }
+            }
+        }
+
+        self.apply_finalize()
     }
 
     fn apply_commit_boundary(&mut self) -> String {
@@ -2001,7 +2025,6 @@ impl Machine {
             FsmEvent::Key(key) => self.apply_key(key),
             FsmEvent::Backspace => self.apply_backspace(),
             FsmEvent::Escape => self.apply_escape(),
-            FsmEvent::Finalize => self.apply_finalize(),
             FsmEvent::CommitBoundary => self.apply_commit_boundary(),
             FsmEvent::CommitDisplayed => self.apply_commit_displayed(),
             FsmEvent::CommitRawBoundary => self.apply_commit_raw_boundary(),
@@ -2025,7 +2048,11 @@ impl Machine {
     }
 
     pub fn finalize(&mut self) -> String {
-        self.transition(FsmEvent::Finalize)
+        self.apply_finalize()
+    }
+
+    pub fn correct_boundary(&mut self) -> String {
+        self.apply_correct_boundary()
     }
 
     pub fn commit_boundary(&mut self) -> String {
@@ -2079,7 +2106,11 @@ impl LanguageMachinePort for Machine {
     }
 
     fn finalize(&mut self) -> String {
-        Machine::finalize(self)
+        self.apply_finalize()
+    }
+
+    fn correct_boundary(&mut self) -> String {
+        Machine::correct_boundary(self)
     }
 
     fn reset(&mut self) {
@@ -2104,6 +2135,7 @@ impl LanguageMachinePort for Machine {
                 Phase::Coda => "coda",
                 Phase::Complete => "complete",
                 Phase::PendingShape => "pending_shape",
+                Phase::PendingValidation => "pending_validation",
                 Phase::Dead => "dead",
             }
             .to_owned(),

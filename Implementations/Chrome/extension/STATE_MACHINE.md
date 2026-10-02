@@ -12,7 +12,7 @@ Chrome/Edge uses the same composition-boundary semantics as the native adapters.
 | `VI_CANDIDATE` | token is still a viable Vietnamese candidate |
 | `RAW_LOCKED` | token has deterministically fallen back to literal/raw typing, including a committed repeat-cancel checkpoint |
 
-These modes belong to the Vietnamese child, not to the root machine. The Vietnamese candidate also tracks onset/nucleus/coda/pending-shape/complete/dead phases. Each logical input event enters one FSM transition. Backspace restores engine state rather than reparsing visible DOM text.
+These modes belong to the Vietnamese child, not to the root machine. The Vietnamese candidate also tracks onset/nucleus/coda/pending-shape/pending-validation/complete/dead phases. Each logical input event enters one FSM transition. Backspace restores engine state rather than reparsing visible DOM text.
 
 ## Repeat-cancel contract
 
@@ -41,7 +41,7 @@ The FSM supports context-aware late transitions such as:
 - `chueyern → chuyển`
 - `dduocwj → được`
 
-High-confidence correction only rearranges or applies intents that were actually typed; it does not invent a missing tone key. These are grammar-validated transitions, not word-specific exceptions.
+High-confidence correction only rearranges or applies intents that were actually typed; it does not invent a missing tone key. The resolver runs once from the root-owned Space boundary, not during live key transitions. Live Telex remains sequential, while explicit repeat-cancel remains an immediate character-level transition.
 
 Repeating the immediately preceding shape/stroke operation cancels it even when
 its target precedes the coda: `dataa → data`, `dayaa → daya`, `banww → banw`.
@@ -49,7 +49,7 @@ Backspace restores the state before the cancel. A further repeated key is litera
 
 ## Ending a composition
 
-Space and punctuation finalize the word with Auto Restore / smart correction before inserting the delimiter. Enter, Tab, navigation keys, and Delete commit the currently displayed text and then continue to the application. For example, `dd` displays `đ`; Right commits `đ` and then moves the caret.
+Space invokes the root correction boundary once, then finalizes and inserts a normal space. Punctuation finalizes without invoking correction. Enter, Tab, navigation keys, and Delete commit the currently displayed text and then continue to the application. For example, `dd` displays `đ`; Right commits `đ` and then moves the caret.
 
 Shift+Space instead commits only the token's physical keystream and ends composition; the Space keystroke is consumed. For example, `refer` may display `rể`, while Shift+Space commits `refer`. Escape restores the literal token in-place and continued typing stays literal until the next boundary.
 

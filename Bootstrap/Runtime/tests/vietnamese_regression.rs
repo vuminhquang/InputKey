@@ -49,11 +49,15 @@ fn options(method: &str, simple_telex: bool, auto_restore: bool) -> Options {
 }
 
 fn run(raw: &str, options: Options) -> String {
-    let mut machine = Machine::new(options, Some(Box::new(Words)));
+    let mut machine = root(options);
     for key in raw.chars() {
         machine.type_key(key);
     }
-    machine.finalize()
+    machine
+        .decision_boundary(' ')
+        .strip_suffix(' ')
+        .unwrap_or_default()
+        .to_owned()
 }
 
 fn root(options: Options) -> RootMachine {
@@ -417,18 +421,13 @@ fn raw_boundary_commits_physical_keys_and_ends_the_token() {
 }
 
 #[test]
-fn recoverable_intent_stays_pending_instead_of_dying_early() {
-    let mut machine = Machine::new(options("telex", false, true), Some(Box::new(Words)));
-    for key in "chuey".chars() {
+fn correction_is_deferred_to_root_boundary() {
+    let mut machine = root(options("telex", false, true));
+    for key in "chueyern".chars() {
         machine.type_key(key);
     }
-    let state = machine.state();
-    assert_eq!(state.mode, Mode::ViCandidate);
-    assert_eq!(state.phase, Phase::PendingShape);
-    for key in "ern".chars() {
-        machine.type_key(key);
-    }
-    assert_eq!(machine.finalize(), "chuyển");
+    assert_ne!(machine.rendered_text(), "chuyển");
+    assert_eq!(machine.decision_boundary(' '), "chuyển ");
 }
 
 #[test]
@@ -473,17 +472,45 @@ fn smart_correction_preserves_base_order_and_only_floats_modifiers() {
             machine.type_key(key);
         }
         assert_eq!(machine.rendered_text(), raw, "{raw} live");
-        assert_eq!(machine.finalize(), raw, "{raw} final");
+        assert_eq!(machine.finalize(), raw, "{raw} child finalize");
+        assert_eq!(run(raw, opts.clone()), raw, "{raw} root boundary");
     }
 
-    for raw in ["thuongwf", "thuongfw", "thuowngf"] {
-        let mut machine = Machine::new(opts.clone(), Some(Box::new(Words)));
-        for key in raw.chars() {
-            machine.type_key(key);
-        }
-        assert_eq!(machine.rendered_text(), "thường", "{raw} live");
-        assert_eq!(machine.finalize(), "thường", "{raw} final");
+    let mut live = Machine::new(opts.clone(), Some(Box::new(Words)));
+    for key in "thuongwf".chars() {
+        live.type_key(key);
     }
+    assert_ne!(live.rendered_text(), "thường");
+    assert_ne!(live.finalize(), "thường");
+
+    for raw in ["thuongwf", "thuongfw", "thuowngf"] {
+        assert_eq!(run(raw, opts.clone()), "thường", "{raw} root boundary");
+    }
+}
+
+#[test]
+fn oe_medial_rejects_labial_onsets_without_rejecting_valid_oe_syllables() {
+    assert_eq!(run("khoer", options("telex", false, true)), "khỏe");
+}
+
+#[test]
+fn speculative_invalid_telex_rolls_back_on_the_next_key() {
+    let mut machine = Machine::new(options("telex", false, true), Some(Box::new(Words)));
+    assert_eq!(machine.type_key('m'), "m");
+    assert_eq!(machine.type_key('o'), "mo");
+    assert_eq!(machine.type_key('r'), "mỏ");
+    assert_eq!(machine.type_key('e'), "mỏe");
+    assert_eq!(machine.state().phase, Phase::PendingValidation);
+
+    assert_eq!(machine.type_key('k'), "morek");
+    assert_eq!(machine.state().mode, Mode::RawLocked);
+
+    let mut space = root(options("telex", false, true));
+    for key in "more".chars() {
+        space.type_key(key);
+    }
+    assert_eq!(space.rendered_text(), "mỏe");
+    assert_eq!(space.decision_boundary(' '), "more ");
 }
 
 #[test]

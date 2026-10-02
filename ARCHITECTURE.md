@@ -37,8 +37,8 @@ InputKey uses one language-independent root composition machine across browser a
 - English collision recovery
 - Backspace, Escape, finalize, reset, and replay
 - one logical input event per FSM transition
-- order-independent high-confidence intent resolution
-- natural composition boundaries with a one-shot raw-key boundary
+- root-owned Space correction phase with optional language-specific correction rules
+- natural composition boundaries with a one-shot raw-key boundary; punctuation/finalize do not invoke Space correction
 
 ## Platform targets
 

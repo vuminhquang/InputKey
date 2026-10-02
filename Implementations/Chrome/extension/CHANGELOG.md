@@ -10,7 +10,8 @@
 - Prevented compatibility transports from replaying a physical key after a target write already occurred, eliminating duplicated characters in Windows Search.
 - Fixed native dynamic language packs so each key/backspace/escape/finalize event is applied exactly once; this removes truncated UTF-8 replacement glyphs such as broken `dd → đ` in Windows Search.
 - Added capability-based fallback for keyboard-focused UI Automation text surfaces such as Windows Terminal: when TSF and writable ranges are unavailable, InputKey can keep composition through its isolated synthetic transport.
-- Changed Vietnamese Smart Correction to preserve the physical order of base letters. Only Telex modifier intent may float in position, so `mac`, `macos`, and `mod` stay ordered while forms such as `thuongwf`, `thuongfw`, and `thuowngf` can still resolve to `thường`.
+- Moved correction timing into the language-independent root FSM: only the Space decision boundary offers the active language one correction pass. Vietnamese live typing stays sequential (`mor → mỏ`, `more → mỏe`), invalid speculative text rolls back on the next printable event, explicit repeat-cancel remains immediate (`exx → ex`), and only modifier intent may float at Space (`thuongwf → thường`) while base-letter order stays fixed (`mac`, `macos`, `mod`).
+- Split native language-pack finalization from boundary correction in language-pack ABI v2 so every language can independently define or omit its own correction policy.
 - Updated Chrome/Edge WASM to use the same language catalog and root composition contract.
 
 # 5.0.0

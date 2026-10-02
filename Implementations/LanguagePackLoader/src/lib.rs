@@ -3,7 +3,7 @@ use inputkey_core_abstractions::{
     LanguageOptionMetadata, LanguagePackPort, LanguageState,
 };
 use inputkey_language_pack_native_abi::{
-    LanguagePackApiV1, LANGUAGE_PACK_ABI_VERSION, LANGUAGE_PACK_ENTRYPOINT,
+    LanguagePackApiV2, LANGUAGE_PACK_ABI_VERSION, LANGUAGE_PACK_ENTRYPOINT,
 };
 use libloading::{Library, Symbol};
 use serde_json::{json, Value};
@@ -12,7 +12,7 @@ use std::{
     sync::Arc,
 };
 
-type Entry = unsafe extern "C" fn() -> *const LanguagePackApiV1;
+type Entry = unsafe extern "C" fn() -> *const LanguagePackApiV2;
 
 fn read_call(call: impl Fn(*mut u8, usize) -> usize) -> String {
     let n = call(std::ptr::null_mut(), 0);
@@ -104,7 +104,7 @@ fn config_json(config: &LanguageConfig) -> String {
 
 pub struct DynamicPack {
     library: Arc<Library>,
-    api: LanguagePackApiV1,
+    api: LanguagePackApiV2,
     metadata: LanguageMetadata,
 }
 
@@ -129,7 +129,7 @@ impl DynamicPack {
                 api.abi_version, LANGUAGE_PACK_ABI_VERSION
             ));
         }
-        if api.struct_size < std::mem::size_of::<LanguagePackApiV1>() {
+        if api.struct_size < std::mem::size_of::<LanguagePackApiV2>() {
             return Err("language-pack API table is too small".into());
         }
         let metadata = metadata_from_json(&read_call(|out, cap| unsafe {
@@ -165,7 +165,7 @@ impl LanguagePackPort for DynamicPack {
 struct DynamicMachine {
     #[allow(dead_code)]
     library: Arc<Library>,
-    api: LanguagePackApiV1,
+    api: LanguagePackApiV2,
     handle: u64,
 }
 
@@ -221,6 +221,9 @@ impl LanguageMachinePort for DynamicMachine {
     }
     fn finalize(&mut self) -> String {
         self.mutate_then_render(self.api.finalize)
+    }
+    fn correct_boundary(&mut self) -> String {
+        self.mutate_then_render(self.api.correct_boundary)
     }
     fn reset(&mut self) {
         unsafe { (self.api.reset)(self.handle) }

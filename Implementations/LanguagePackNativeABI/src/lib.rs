@@ -1,11 +1,11 @@
 //! Native function-table contract for dynamically loaded InputKey language packs.
 
-pub const LANGUAGE_PACK_ABI_VERSION: u32 = 1;
-pub const LANGUAGE_PACK_ENTRYPOINT: &str = "inputkey_language_pack_v1";
+pub const LANGUAGE_PACK_ABI_VERSION: u32 = 2;
+pub const LANGUAGE_PACK_ENTRYPOINT: &str = "inputkey_language_pack_v2";
 
 #[repr(C)]
 #[derive(Clone, Copy)]
-pub struct LanguagePackApiV1 {
+pub struct LanguagePackApiV2 {
     pub abi_version: u32,
     pub struct_size: usize,
     pub metadata_json: unsafe extern "C" fn(out: *mut u8, cap: usize) -> usize,
@@ -24,7 +24,10 @@ pub struct LanguagePackApiV1 {
     ) -> usize,
     pub backspace: unsafe extern "C" fn(handle: u64, out: *mut u8, cap: usize) -> usize,
     pub escape: unsafe extern "C" fn(handle: u64, out: *mut u8, cap: usize) -> usize,
+    // `finalize` performs ordinary language finalization only. The root calls
+    // `correct_boundary` separately, and only for its Space decision boundary.
     pub finalize: unsafe extern "C" fn(handle: u64, out: *mut u8, cap: usize) -> usize,
+    pub correct_boundary: unsafe extern "C" fn(handle: u64, out: *mut u8, cap: usize) -> usize,
     pub state_json: unsafe extern "C" fn(handle: u64, out: *mut u8, cap: usize) -> usize,
     pub rendered: unsafe extern "C" fn(handle: u64, out: *mut u8, cap: usize) -> usize,
     pub raw: unsafe extern "C" fn(handle: u64, out: *mut u8, cap: usize) -> usize,

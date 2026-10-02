@@ -97,6 +97,14 @@ pub trait LanguageMachinePort: Send {
     fn backspace(&mut self) -> String;
     fn escape(&mut self) -> String;
     fn finalize(&mut self) -> String;
+
+    /// Gives the active language one correction opportunity when the root
+    /// enters its Space decision boundary. Languages without correction rules
+    /// keep normal finalize behavior.
+    fn correct_boundary(&mut self) -> String {
+        self.finalize()
+    }
+
     fn reset(&mut self);
     fn state(&self) -> LanguageState;
 

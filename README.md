@@ -17,7 +17,7 @@ InputKey is a Rust-first multilingual input method with one language-independent
 
 InputKey follows normal IME boundary behavior instead of keeping a separate token mode. While a token is active:
 
-- **Space and punctuation** finalize the word, including Auto Restore / high-confidence correction, then insert the delimiter.
+- **Space** enters the root correction boundary: the active language gets one optional correction pass, the token is finalized, and a normal space is inserted. **Punctuation** finalizes without invoking correction, then inserts the delimiter.
 - **Enter, Tab, arrows, Home/End, Page Up/Down, and Delete** commit exactly the text currently displayed, end composition, and let that same key continue to the application.
 - **Shift+Space** is a one-shot raw escape: it commits the physical keystroke sequence for the current token, consumes the Space keystroke, and ends composition.
 
@@ -42,9 +42,9 @@ The shared engine supports:
 - English collision recovery
 - Backspace/Escape reconstruction
 - natural IME composition boundaries and one-shot Shift+Space raw escape
-- high-confidence intent correction, enabled by default on Windows
+- root-owned Space correction with optional language-specific correction rules, enabled by default for Vietnamese on Windows
 
-The intent resolver can recover ordering-independent Telex sequences without inventing missing tone input, including `nhieue → nhiêu`, `chueyern → chuyển`, and `dduocwj → được`. Regression coverage also includes `pass → pas`, `passs → pass`, `password → password`, `urrl → url`, `assk → ask`, `affter → after`, `exxe → exe`, and `ajjax → ajax`.
+At the Space boundary, the Vietnamese correction hook can recover modifier-order variants without inventing missing tone input, including `nhieue → nhiều`, `chueyern → chuyển`, and `dduocwj → được`. Live typing remains sequential; explicit repeat-cancel still happens immediately at the character event. Regression coverage also includes `pass → pas`, `passs → pass`, `password → password`, `urrl → url`, `assk → ask`, `affter → after`, `exxe → exe`, and `ajjax → ajax`.
 
 ## Privacy
 

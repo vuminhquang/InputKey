@@ -73,6 +73,10 @@ impl PackHost {
         self.with_mut(handle, |machine| machine.finalize())
     }
 
+    pub fn correct_boundary(&self, handle: u64) -> String {
+        self.with_mut(handle, |machine| machine.correct_boundary())
+    }
+
     pub fn reset(&self, handle: u64) {
         let _ = self.with_mut(handle, |machine| {
             machine.reset();

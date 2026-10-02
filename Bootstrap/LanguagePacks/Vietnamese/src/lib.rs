@@ -1,7 +1,7 @@
 #![allow(non_snake_case)]
 
 use inputkey_language_pack_abi::{copy_utf8, read_utf8, PackHost};
-use inputkey_language_pack_native_abi::{LanguagePackApiV1, LANGUAGE_PACK_ABI_VERSION};
+use inputkey_language_pack_native_abi::{LanguagePackApiV2, LANGUAGE_PACK_ABI_VERSION};
 use std::sync::{Arc, OnceLock};
 
 fn host() -> &'static PackHost {
@@ -59,6 +59,10 @@ unsafe extern "C" fn finalize(handle: u64, out: *mut u8, cap: usize) -> usize {
     copy_utf8(&host().finalize(handle), out, cap)
 }
 
+unsafe extern "C" fn correct_boundary(handle: u64, out: *mut u8, cap: usize) -> usize {
+    copy_utf8(&host().correct_boundary(handle), out, cap)
+}
+
 unsafe extern "C" fn state_json(handle: u64, out: *mut u8, cap: usize) -> usize {
     copy_utf8(&host().state_json(handle), out, cap)
 }
@@ -79,9 +83,9 @@ unsafe extern "C" fn has_history(handle: u64) -> i32 {
     host().has_history(handle) as i32
 }
 
-static API: LanguagePackApiV1 = LanguagePackApiV1 {
+static API: LanguagePackApiV2 = LanguagePackApiV2 {
     abi_version: LANGUAGE_PACK_ABI_VERSION,
-    struct_size: std::mem::size_of::<LanguagePackApiV1>(),
+    struct_size: std::mem::size_of::<LanguagePackApiV2>(),
     metadata_json,
     create,
     destroy,
@@ -90,6 +94,7 @@ static API: LanguagePackApiV1 = LanguagePackApiV1 {
     backspace,
     escape,
     finalize,
+    correct_boundary,
     state_json,
     rendered,
     raw,
@@ -98,6 +103,6 @@ static API: LanguagePackApiV1 = LanguagePackApiV1 {
 };
 
 #[no_mangle]
-pub extern "C" fn inputkey_language_pack_v1() -> *const LanguagePackApiV1 {
+pub extern "C" fn inputkey_language_pack_v2() -> *const LanguagePackApiV2 {
     &API
 }

@@ -60,7 +60,11 @@ impl Machine {
                 if !self.child.history_active() {
                     return delimiter.to_string();
                 }
-                let mut committed = self.child.finalize();
+                let mut committed = if delimiter == ' ' {
+                    self.correct_boundary()
+                } else {
+                    self.child.finalize()
+                };
                 self.child.reset();
                 committed.push(delimiter);
                 committed
@@ -85,6 +89,10 @@ impl Machine {
                 String::new()
             }
         }
+    }
+
+    fn correct_boundary(&mut self) -> String {
+        self.child.correct_boundary()
     }
 
     pub fn accepts_key(&self, key: char) -> bool {
@@ -191,5 +199,79 @@ impl TypingEnginePort for Machine {
 
     fn history_active(&self) -> bool {
         Machine::has_history(self)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use inputkey_core_abstractions::LanguageState;
+
+    struct ProbeLanguage {
+        raw: String,
+    }
+
+    impl ProbeLanguage {
+        fn new() -> Self {
+            Self { raw: String::new() }
+        }
+    }
+
+    impl LanguageMachinePort for ProbeLanguage {
+        fn accepts_key(&self, key: char) -> bool {
+            key.is_ascii_alphabetic()
+        }
+
+        fn type_key(&mut self, key: char) -> String {
+            self.raw.push(key);
+            self.raw.clone()
+        }
+
+        fn backspace(&mut self) -> String {
+            self.raw.pop();
+            self.raw.clone()
+        }
+
+        fn escape(&mut self) -> String {
+            self.raw.clone()
+        }
+
+        fn finalize(&mut self) -> String {
+            format!("final:{}", self.raw)
+        }
+
+        fn correct_boundary(&mut self) -> String {
+            format!("correct:{}", self.raw)
+        }
+
+        fn reset(&mut self) {
+            self.raw.clear();
+        }
+
+        fn state(&self) -> LanguageState {
+            LanguageState {
+                raw: self.raw.clone(),
+                rendered: self.raw.clone(),
+                mode: "probe".into(),
+                phase: "probe".into(),
+            }
+        }
+    }
+
+    #[test]
+    fn only_space_decision_boundary_invokes_language_correction() {
+        let mut root = Machine::new("probe", Box::new(ProbeLanguage::new()));
+
+        root.type_key('a');
+        assert_eq!(root.decision_boundary(' '), "correct:a ");
+
+        root.type_key('b');
+        assert_eq!(root.decision_boundary('.'), "final:b.");
+
+        root.type_key('c');
+        assert_eq!(root.commit_boundary(), "final:c");
+
+        root.type_key('d');
+        assert_eq!(root.finalize(), "final:d");
     }
 }
