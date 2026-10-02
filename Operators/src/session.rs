@@ -1,29 +1,9 @@
-use inputkey_boundary::{InputEvent, InputType, Options, OutputDto};
+use inputkey_boundary::{InputEvent, InputType, OutputDto};
 use inputkey_core_abstractions::{
-    CoreEvent, CoreEventType, EngineState, EventPublisher, LexiconPort, Mode, Phase,
+    CoreEvent, CoreEventType, EngineState, EventPublisher, RootPhase,
 };
 
 use crate::Machine;
-
-fn mode_name(mode: Mode) -> &'static str {
-    match mode {
-        Mode::Start => "start",
-        Mode::ViCandidate => "vi_candidate",
-        Mode::RawLocked => "raw_locked",
-    }
-}
-
-fn phase_name(phase: Phase) -> &'static str {
-    match phase {
-        Phase::Start => "start",
-        Phase::Onset => "onset",
-        Phase::Nucleus => "nucleus",
-        Phase::Coda => "coda",
-        Phase::Complete => "complete",
-        Phase::PendingShape => "pending_shape",
-        Phase::Dead => "dead",
-    }
-}
 
 fn project(machine: &Machine, commit: &str) -> OutputDto {
     let state = machine.state();
@@ -31,8 +11,12 @@ fn project(machine: &Machine, commit: &str) -> OutputDto {
         rendered: state.rendered,
         raw: state.raw,
         commit: commit.to_owned(),
-        mode: mode_name(state.mode).to_owned(),
-        phase: phase_name(state.phase).to_owned(),
+        mode: match state.phase {
+            RootPhase::Idle => "idle",
+            RootPhase::Composing => "composing",
+        }
+        .to_owned(),
+        phase: state.child_phase,
         changed: false,
     }
 }
@@ -45,12 +29,7 @@ pub struct Session {
 }
 
 impl Session {
-    pub fn new(
-        options: Options,
-        lexicon: Option<Box<dyn LexiconPort>>,
-        publisher: Option<Box<dyn EventPublisher>>,
-    ) -> Self {
-        let machine = Machine::new(options, lexicon);
+    pub fn new(machine: Machine, publisher: Option<Box<dyn EventPublisher>>) -> Self {
         let last = project(&machine, "");
         Self {
             machine,
@@ -62,6 +41,10 @@ impl Session {
 
     pub fn machine(&self) -> &Machine {
         &self.machine
+    }
+
+    pub fn machine_mut(&mut self) -> &mut Machine {
+        &mut self.machine
     }
 
     pub fn state(&self) -> EngineState {
@@ -86,7 +69,7 @@ impl Session {
     }
 
     pub fn handle(&mut self, input: InputEvent) -> OutputDto {
-        let before = self.machine.rendered_text().to_owned();
+        let before = self.machine.rendered_text();
         let mut commit = String::new();
 
         match input.kind {
@@ -104,11 +87,22 @@ impl Session {
             InputType::Finalize => {
                 commit = self.machine.finalize();
             }
+            InputType::DecisionBoundary => {
+                if let Some(delimiter) = input.key.chars().next() {
+                    commit = self.machine.decision_boundary(delimiter);
+                }
+            }
+            InputType::CommitBoundary => {
+                commit = self.machine.commit_boundary();
+            }
+            InputType::CommitDisplayed => {
+                commit = self.machine.commit_displayed();
+            }
+            InputType::CommitRawBoundary => {
+                commit = self.machine.commit_raw_boundary();
+            }
             InputType::Reset => {
                 self.machine.reset();
-            }
-            InputType::LiteralizeToken => {
-                self.machine.literalize_token();
             }
         }
 

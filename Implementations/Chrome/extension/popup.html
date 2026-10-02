@@ -11,64 +11,43 @@
     <div class="top">
       <div>
         <h1>InputKey</h1>
-        <p class="sub">Gõ tiếng Việt trong Chrome · Telex / VNI</p>
+        <p class="sub">Bộ gõ đa ngôn ngữ · một composition engine</p>
         <p id="version" class="sub"></p>
       </div>
-      <button id="toggle" class="mode" aria-label="Bật hoặc tắt gõ tiếng Việt" title="Bật/tắt tiếng Việt">V</button>
+      <button id="toggle" class="mode" aria-label="Bật hoặc tắt InputKey" title="Bật/tắt InputKey">VI</button>
     </div>
 
     <label class="field">
+      <span>Ngôn ngữ</span>
+      <select id="language" aria-label="Ngôn ngữ"></select>
+    </label>
+
+    <label class="field">
       <span>Kiểu gõ</span>
-      <select id="method" aria-label="Kiểu gõ">
-        <option value="telex">Telex</option>
-        <option value="vni">VNI</option>
-      </select>
+      <select id="method" aria-label="Kiểu gõ"></select>
     </label>
 
-    <label class="check">
-      <input id="simpleTelex" type="checkbox">
-      <span>Simple Telex (W đầu từ không thành ư)</span>
-    </label>
-
-    <label class="check">
-      <input id="autoRestore" type="checkbox">
-      <span>Tự trả phím gốc khi từ không hợp lệ tiếng Việt (khuyên dùng)</span>
-    </label>
-
-    <p class="micro-note">Nhấn lặp phím dấu để hủy: gõ docss → docs; pass → pas; passs → pass. Các từ password, coffee vẫn được giữ nguyên.</p>
+    <div id="languageOptions"></div>
 
     <label class="check">
       <input id="showToast" type="checkbox">
-      <span>Hiện thông báo V / E khi chuyển chế độ</span>
+      <span>Hiện thông báo khi bật/tắt InputKey</span>
     </label>
 
-    <section class="shortcut" aria-label="Phím tắt bỏ dấu cả từ">
-      <strong>Hoàn tác dấu của từ</strong>
-      <div class="shortcut-controls">
-        <button id="shortcutRecord" type="button">Ctrl + Space</button>
-        <label class="shortcut-enable"><input id="shortcutEnabled" type="checkbox"> Bật</label>
-        <button id="shortcutReset" type="button">Đặt lại</button>
-      </div>
-      <small id="shortcutStatus" aria-live="polite">refer → rể → phím tắt → refer</small>
-    </section>
+    <p class="micro-note"><strong>Space:</strong> quyết định từ hiện tại rồi chèn khoảng trắng. <strong>Shift + Space:</strong> giữ nguyên chuỗi phím vật lý và kết thúc composition, không chèn khoảng trắng.</p>
 
-    <div class="hint">
-      <strong>Phím tắt:</strong> Ctrl + Shift hoặc Alt + Z<br>
-      <strong>Telex:</strong> aa → â · aw → ă · dd → đ · s/f/r/x/j → dấu thanh<br>
-      <strong>VNI:</strong> 6/7/8/9 → dấu chữ · 1–5 → dấu thanh
-    </div>
+    <div id="hint" class="hint"></div>
 
     <div class="test">
       <label for="try">Thử gõ ngay</label>
-      <textarea id="try" rows="2" placeholder="Thử: tieengs Vieetj, dduwowngf"></textarea>
-      <small>Ô thử chạy trực tiếp bằng engine của extension.</small>
+      <textarea id="try" rows="2" placeholder="Vietnamese: tieengs Vieetj · French: ees, es, ef, oe, cc"></textarea>
+      <small>Ô thử dùng đúng Root FSM và language pack của extension.</small>
     </div>
 
     <p class="foot">Xử lý cục bộ · không lưu hoặc gửi nội dung bạn gõ</p>
     <p class="developer">Developer: <a href="mailto:vu.minh.quang@outlook.com">vu.minh.quang@outlook.com</a></p>
   </main>
   <script src="engine_wasm.js"></script>
-  <script src="literalize_shortcut.js"></script>
   <script src="popup.js"></script>
 </body>
 </html>

@@ -1,0 +1,15 @@
+[package]
+name = "inputkey-language-pack-vietnamese"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lib]
+name = "InputKeyLanguageVietnamese"
+crate-type = ["cdylib"]
+
+[dependencies]
+inputkey-language-pack-native-abi = { path = "../../../Implementations/LanguagePackNativeABI" }
+inputkey-language-pack-abi = { path = "../../LanguagePackABI" }
+inputkey-language-vietnamese = { path = "../../../Implementations/Languages/Vietnamese" }
+inputkey-english-bloom = { path = "../../../Implementations/EnglishBloom" }

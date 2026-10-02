@@ -5,11 +5,12 @@
 
   const DEFAULTS = {
     enabled: true,
+    language: 'vi',
     method: 'telex',
     simpleTelex: false,
     autoRestore: true,
-    showToast: true,
-    literalizeShortcut: { ...InputKeyLiteralizeShortcut.DEFAULT_LITERALIZE_SHORTCUT }
+    smartCorrection: true,
+    showToast: true
   };
 
   let settings = { ...DEFAULTS };
@@ -188,19 +189,16 @@
     setTimeout(() => { div.style.opacity = '0'; setTimeout(() => div.remove(), 220); }, 900);
   }
 
-  function toggleVietnamese() {
+  function toggleInputKey() {
     settings.enabled = !settings.enabled;
     chrome.storage.local.set({ enabled: settings.enabled });
-    showToast(settings.enabled ? 'InputKey: V' : 'InputKey: E');
+    showToast(settings.enabled ? `InputKey: ${String(settings.language || 'vi').toUpperCase()}` : 'InputKey: OFF');
   }
 
   function isPrintableKey(e) {
     return e.key && e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey;
   }
 
-  function isWordDelimiter(key) {
-    return key.length === 1 && /[\s.,;:!?(){}<>"'`~@#$%^&*+=\\/|_-]/.test(key);
-  }
 
   document.addEventListener('keydown', e => {
     if (e.key === 'Control') { chord.ctrl = true; if (chord.shift) chord.armed = true; return; }
@@ -210,7 +208,7 @@
     if (e.altKey && !e.ctrlKey && !e.metaKey && e.key.toLowerCase() === 'z') {
       e.preventDefault();
       e.stopImmediatePropagation();
-      toggleVietnamese();
+      toggleInputKey();
       return;
     }
 
@@ -223,25 +221,25 @@
     }
     if (e.isComposing || e.keyCode === 229) return;
 
-    if (InputKeyLiteralizeShortcut.matchesShortcut(e, settings.literalizeShortcut)) {
-      const s = getState(el);
-      if (s.engine.raw) {
-        e.preventDefault();
-        e.stopImmediatePropagation();
-        const old = s.lastRendered;
-        const raw = s.engine.literalizeToken();
-        replaceBeforeCursor(el, old, raw);
-        s.lastRendered = raw;
-      }
+    const s = getState(el);
+
+    if (e.code === 'Space' && e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey && s.engine.raw) {
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      const old = s.lastRendered;
+      const raw = s.engine.commitRawBoundary();
+      replaceBeforeCursor(el, old, raw);
+      s.lastRendered = '';
       return;
     }
 
     if (e.ctrlKey || e.metaKey || e.altKey) {
-      if (!['Shift', 'Control'].includes(e.key)) resetState(el);
+      if (!['Shift', 'Control'].includes(e.key) && s.engine.raw) {
+        s.engine.commitDisplayed();
+        s.lastRendered = '';
+      }
       return;
     }
-
-    const s = getState(el);
 
     if (e.key === 'Escape' && s.engine.raw) {
       e.preventDefault();
@@ -263,34 +261,28 @@
     }
 
     if (['ArrowLeft','ArrowRight','ArrowUp','ArrowDown','Home','End','PageUp','PageDown','Delete','Insert','Tab','Enter'].includes(e.key)) {
-      resetState(el);
+      if (s.engine.raw) s.engine.commitDisplayed();
+      s.lastRendered = '';
       return;
     }
 
     if (isPrintableKey(e)) {
-      if (isWordDelimiter(e.key)) {
-        if (s.engine.raw) {
-          const old = s.lastRendered;
-          const finalText = s.engine.finalize();
-          if (finalText !== old) {
-            e.preventDefault();
-            replaceBeforeCursor(el, old, finalText);
-            insertDelimiter(el, e.key);
-          }
-          resetState(el);
-        }
+      if (s.engine.accepts(e.key)) {
+        e.preventDefault();
+        const old = s.lastRendered;
+        const next = s.engine.type(e.key);
+        replaceBeforeCursor(el, old, next);
+        s.lastRendered = next;
         return;
       }
 
-      // VNI digits and Telex letters are handled by the engine; other symbols reset.
-      const valid = settings.method === 'vni' ? /^[A-Za-z0-9]$/.test(e.key) : /^[A-Za-z\[\]]$/.test(e.key);
-      if (!valid) { resetState(el); return; }
-
-      e.preventDefault();
-      const old = s.lastRendered;
-      const next = s.engine.type(e.key);
-      replaceBeforeCursor(el, old, next);
-      s.lastRendered = next;
+      if (s.engine.raw) {
+        e.preventDefault();
+        const old = s.lastRendered;
+        const committed = s.engine.decisionBoundary(e.key);
+        replaceBeforeCursor(el, old, committed);
+        s.lastRendered = '';
+      }
     }
   }, true);
 
@@ -300,7 +292,7 @@
     if ((e.key === 'Control' || e.key === 'Shift') && chord.armed && !chord.used && (!chord.ctrl || !chord.shift)) {
       chord.armed = false;
       chord.used = true;
-      toggleVietnamese();
+      toggleInputKey();
     }
     if (!chord.ctrl && !chord.shift) chord = { ctrl: false, shift: false, armed: false, used: false };
   }, true);

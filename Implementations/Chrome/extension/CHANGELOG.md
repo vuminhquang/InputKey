@@ -1,3 +1,13 @@
+# 5.1.0
+
+- Added a language-independent root composition machine with language child machines.
+- Added French Telex: `ee → ê`, `es → é`, `ef → è`, `oe → œ`, `ae → æ`, `cc → ç`, and related French accents.
+- Added native dynamic language packs and metadata-driven language/method/options UI.
+- Made Space/Shift+Space/navigation boundary semantics shared across languages.
+- Reworked Windows compatibility input into capability-based native range, UI Automation, and isolated synthetic transports.
+- Added compatibility support for custom Chromium render surfaces such as Zalo without app-specific routing.
+- Updated Chrome/Edge WASM to use the same language catalog and root composition contract.
+
 # 5.0.0
 
 - Rewrote the production engine and native integrations in Rust.

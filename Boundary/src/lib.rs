@@ -1,6 +1,6 @@
 //! Boundary protocol declarations and DTOs. No executable behavior lives here.
 
-pub const PROTOCOL_VERSION: u32 = 2;
+pub const PROTOCOL_VERSION: u32 = 7;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum InputType {
@@ -8,8 +8,11 @@ pub enum InputType {
     Backspace,
     Escape,
     Finalize,
+    DecisionBoundary,
+    CommitBoundary,
+    CommitDisplayed,
+    CommitRawBoundary,
     Reset,
-    LiteralizeToken,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -19,11 +22,14 @@ pub struct InputEvent {
     pub timestamp: i64,
 }
 
+/// Compatibility DTO for the legacy Vietnamese constructors. New language packs use
+/// `LanguageConfig` from CoreAbstractions through the root composition contract.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Options {
     pub method: String,
     pub simple_telex: bool,
     pub auto_restore: bool,
+    pub smart_correction: bool,
     pub double_cancel: bool,
     pub cancel_preference: String,
 }

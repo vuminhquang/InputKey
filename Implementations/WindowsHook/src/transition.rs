@@ -10,24 +10,31 @@ pub fn apply(
         EventKind::TypeChar => key.map(|c| engine.type_key(c)),
         EventKind::Backspace => Some(engine.backspace()),
         EventKind::Escape => Some(engine.escape()),
-        EventKind::Literalize => Some(engine.literalize_token()),
-        EventKind::FinalizeAndReplay => Some(engine.finalize()),
-        EventKind::ResetOnly | EventKind::ResetAndReplayKeepDisplayed => {
+        EventKind::RawBoundary => Some(engine.commit_raw_boundary()),
+        EventKind::FinalizeWithDelimiter => {
+            key.map(|delimiter| engine.decision_boundary(delimiter))
+        }
+        EventKind::FinalizeOnly => Some(engine.commit_boundary()),
+        EventKind::ResetOnly => {
             engine.reset();
             None
         }
-        _ => None,
+        EventKind::Pass => None,
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
     struct Fake {
         value: String,
-        calls: usize,
     }
+
     impl TypingEnginePort for Fake {
+        fn accepts_key(&self, key: char) -> bool {
+            key.is_ascii_alphabetic()
+        }
         fn type_key(&mut self, key: char) -> String {
             self.value.push(key);
             self.value.clone()
@@ -43,10 +50,19 @@ mod tests {
         fn finalize(&mut self) -> String {
             self.value.clone()
         }
-        fn literalize_token(&mut self) -> String {
-            self.calls += 1;
-            self.value = "literal".into();
-            self.value.clone()
+        fn decision_boundary(&mut self, delimiter: char) -> String {
+            let mut value = std::mem::take(&mut self.value);
+            value.push(delimiter);
+            value
+        }
+        fn commit_boundary(&mut self) -> String {
+            std::mem::take(&mut self.value)
+        }
+        fn commit_displayed(&mut self) -> String {
+            std::mem::take(&mut self.value)
+        }
+        fn commit_raw_boundary(&mut self) -> String {
+            std::mem::take(&mut self.value)
         }
         fn reset(&mut self) {
             self.value.clear();
@@ -61,24 +77,36 @@ mod tests {
             !self.value.is_empty()
         }
     }
+
     #[test]
-    fn literalize_uses_same_transformed_engine() {
-        let mut creations = 0;
-        let mut factory = || {
-            creations += 1;
-            Fake {
-                value: String::new(),
-                calls: 0,
-            }
+    fn finalize_starts_the_next_token_cleanly() {
+        let mut engine = Fake {
+            value: String::new(),
         };
-        let mut engine = factory();
+        apply(&mut engine, EventKind::TypeChar, Some('g'));
+        apply(&mut engine, EventKind::TypeChar, Some('o'));
+        assert_eq!(
+            apply(&mut engine, EventKind::FinalizeOnly, None),
+            Some("go".into())
+        );
+        assert!(!engine.history_active());
+        assert_eq!(
+            apply(&mut engine, EventKind::TypeChar, Some('n')),
+            Some("n".into())
+        );
+    }
+
+    #[test]
+    fn raw_boundary_ends_the_current_engine_session() {
+        let mut engine = Fake {
+            value: String::new(),
+        };
         apply(&mut engine, EventKind::TypeChar, Some('a'));
         apply(&mut engine, EventKind::TypeChar, Some('s'));
         assert_eq!(
-            apply(&mut engine, EventKind::Literalize, None),
-            Some("literal".into())
+            apply(&mut engine, EventKind::RawBoundary, None),
+            Some("as".into())
         );
-        assert_eq!(engine.calls, 1);
-        assert_eq!(creations, 1);
+        assert!(!engine.history_active());
     }
 }

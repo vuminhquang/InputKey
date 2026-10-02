@@ -9,5 +9,6 @@ crate-type = ["cdylib", "staticlib"]
 
 [dependencies]
 inputkey-boundary = { path = "../../Boundary" }
-inputkey-english-bloom = { path = "../../Implementations/EnglishBloom" }
+inputkey-core-abstractions = { path = "../../CoreAbstractions" }
 inputkey-operators = { path = "../../Operators" }
+inputkey-runtime = { path = "../Runtime" }

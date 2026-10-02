@@ -1,0 +1,9 @@
+[package]
+name = "inputkey-language-vietnamese"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+inputkey-core-abstractions = { path = "../../../CoreAbstractions" }
+

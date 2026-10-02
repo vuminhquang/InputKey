@@ -1,0 +1,9 @@
+[package]
+name = "inputkey-language-pack-abi"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+inputkey-core-abstractions = { path = "../../CoreAbstractions" }
+serde_json = "1"

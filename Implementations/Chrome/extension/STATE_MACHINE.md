@@ -1,10 +1,10 @@
 # State machine contract
 
-The FSM lives in the repository `Operators` layer and is compiled to WASM for Chrome. This file documents behavior; it does not define rules.
+The language-independent root composition machine lives in `Operators` and is compiled to WASM for Chrome together with the bundled language children. This file documents behavior; it does not define rules.
 
-The Chrome/Edge extension lets users configure the “Hoàn tác dấu của từ” shortcut in its popup. It defaults to Ctrl+Space on Windows and in Chrome/Edge; the extension matches the recorded physical key code and exact modifiers before issuing `LiteralizeToken`.
+Chrome/Edge uses the same composition-boundary semantics as the native adapters. Shift+Space is a fixed one-shot raw boundary; it is not a persistent mode or a configurable shortcut.
 
-## Main modes
+## Vietnamese child modes
 
 | Mode | Meaning |
 | --- | --- |
@@ -12,7 +12,7 @@ The Chrome/Edge extension lets users configure the “Hoàn tác dấu của t�
 | `VI_CANDIDATE` | token is still a viable Vietnamese candidate |
 | `RAW_LOCKED` | token has deterministically fallen back to literal/raw typing, including a committed repeat-cancel checkpoint |
 
-The Vietnamese candidate also tracks onset/nucleus/coda/pending-shape/complete/dead phases. Backspace restores snapshots rather than reparsing visible DOM text.
+These modes belong to the Vietnamese child, not to the root machine. The Vietnamese candidate also tracks onset/nucleus/coda/pending-shape/complete/dead phases. Each logical input event enters one FSM transition. Backspace restores engine state rather than reparsing visible DOM text.
 
 ## Repeat-cancel contract
 
@@ -37,8 +37,11 @@ The FSM supports context-aware late transitions such as:
 - `nuawx → nữa`
 - `ddaya → đây`
 - `duowjcd → được`
+- `nhieue → nhiêu`
+- `chueyern → chuyển`
+- `dduocwj → được`
 
-These are grammar-validated transitions, not word-specific exceptions.
+High-confidence correction only rearranges or applies intents that were actually typed; it does not invent a missing tone key. These are grammar-validated transitions, not word-specific exceptions.
 
 Repeating the immediately preceding shape/stroke operation cancels it even when
 its target precedes the coda: `dataa → data`, `dayaa → daya`, `banww → banw`.
@@ -46,10 +49,8 @@ Backspace restores the state before the cancel. A further repeated key is litera
 
 ## Ending a composition
 
-Space/punctuation finalize with Auto Restore. Cursor movement instead keeps the
-displayed text and resets history: `data`, Right, Space leaves `dât`. Navigation
-is never prevented by this operation. Escape restores the literal token and
-continued typing stays literal until the next boundary.
+Space and punctuation finalize the word with Auto Restore / smart correction before inserting the delimiter. Enter, Tab, navigation keys, and Delete commit the currently displayed text and then continue to the application. For example, `dd` displays `đ`; Right commits `đ` and then moves the caret.
 
-For Chrome in WSLg/RDP, the Windows adapter passes physical keys through and this
-extension owns composition. Do not enable a second Linux IME in the same field.
+Shift+Space instead commits only the token's physical keystream and ends composition; the Space keystroke is consumed. For example, `refer` may display `rể`, while Shift+Space commits `refer`. Escape restores the literal token in-place and continued typing stays literal until the next boundary.
+
+Only one input method should own a field at a time. When the browser extension owns composition in a remote or WSLg browser, disable any second IME for that same field to avoid double conversion.

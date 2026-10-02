@@ -46,7 +46,7 @@ for p in ROOT.rglob("*"):
     if excluded(p):
         continue
     if p.is_dir() and p.name.lower() in FORBIDDEN_DIRS:
-        errors.append(f"forbidden F.A.P dump directory: {rel(p)}")
+        errors.append(f"forbidden catch-all directory: {rel(p)}")
     if p.is_file() and p.suffix.lower() == ".go":
         errors.append(f"production Go file: {rel(p)}")
 
@@ -66,7 +66,7 @@ for member in members:
     if not parts or parts[0] not in {
         "Boundary", "CoreAbstractions", "Operators", "Implementations", "Bootstrap"
     }:
-        errors.append(f"workspace member is outside A.D.D roles: {member}")
+        errors.append(f"workspace member is outside declared architecture roles: {member}")
     if any(part.lower() in FORBIDDEN_DIRS for part in parts):
         errors.append(f"workspace member uses forbidden dump directory: {member}")
 
@@ -136,4 +136,4 @@ if errors:
         print(f"- {error}")
     sys.exit(1)
 
-print("Architecture checks passed: A.D.D V3/F.A.P dependency direction is intact.")
+print("Architecture checks passed: dependency direction is intact.")

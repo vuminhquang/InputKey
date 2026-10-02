@@ -2,18 +2,34 @@ from pathlib import Path
 import re
 
 root = Path(__file__).resolve().parents[2]
-source = root / "Implementations/WindowsHook/src/win32.rs"
-text = source.read_text(encoding="utf-8")
+hook_source = root / "Implementations/WindowsHook/src/win32.rs"
+resolver_source = root / "Implementations/WindowsHook/src/transport.rs"
+native_source = root / "Implementations/WindowsHook/src/native.rs"
+uia_source = root / "Implementations/WindowsHook/src/uia.rs"
+synthetic_source = root / "Implementations/WindowsHook/src/synthetic.rs"
+clipboard_source = root / "Implementations/WindowsClipboard/src/lib.rs"
+transition_source = root / "Implementations/WindowsHook/src/transition.rs"
 
-match = re.search(r"(?s)(?:unsafe\s+)?extern\s+\"system\"\s+fn\s+keyboard_proc\b.*?\{", text)
+hook = hook_source.read_text(encoding="utf-8")
+resolver = resolver_source.read_text(encoding="utf-8")
+native = native_source.read_text(encoding="utf-8")
+uia = uia_source.read_text(encoding="utf-8")
+synthetic = synthetic_source.read_text(encoding="utf-8")
+clipboard = clipboard_source.read_text(encoding="utf-8")
+transition = transition_source.read_text(encoding="utf-8")
+
+match = re.search(
+    r'(?s)(?:unsafe\s+)?extern\s+"system"\s+fn\s+keyboard_proc\b.*?\{',
+    hook,
+)
 if not match:
-    raise SystemExit("Windows hook check failed: keyboard_proc callback is missing")
+    raise SystemExit("Windows compatibility check failed: keyboard_proc is missing")
 
 start = match.start()
 depth = 0
 body_end = None
-for index in range(text.find("{", start), len(text)):
-    char = text[index]
+for index in range(hook.find("{", start), len(hook)):
+    char = hook[index]
     if char == "{":
         depth += 1
     elif char == "}":
@@ -23,60 +39,158 @@ for index in range(text.find("{", start), len(text)):
             break
 
 if body_end is None:
-    raise SystemExit("Windows hook check failed: keyboard_proc body is incomplete")
+    raise SystemExit("Windows compatibility check failed: keyboard_proc body is incomplete")
 
-body = text[start:body_end]
-forbidden = (
-    "SendInput",
-    "EnginePort",
+body = hook[start:body_end]
+forbidden_callback = (
+    "ClipboardPaste",
+    "TypingEnginePort",
     "Mutex",
     "RwLock",
-    ".recv(",
     "WaitFor",
-    "sleep(",
-    "File::",
-    "OpenOptions",
+    "Ole",
+    "OpenClipboard",
+    "SetClipboardData",
+    "SendInput",
+    "keybd_event",
     "RegSetValue",
     "RegCreate",
     "std::fs",
-    "GetAsyncKeyState",
+    "sleep(",
 )
-found = [word for word in forbidden if word in body]
+found = [word for word in forbidden_callback if word.lower() in body.lower()]
 if found:
     raise SystemExit(
-        "Windows hook check failed: forbidden callback operations: " + ", ".join(found)
+        "Windows compatibility check failed: blocking/mutating callback operations: "
+        + ", ".join(found)
     )
 
-if not re.search(r"HOOK_ID\s*=\s*id\b", text) or "GetCurrentThreadId()" not in text:
-    raise SystemExit("Windows hook check failed: actual hook thread ID is not assigned")
+for forbidden in (
+    "SendInput",
+    "keybd_event",
+    "KEYEVENTF_UNICODE",
+    "SetTimer(",
+    "WM_TIMER",
+    "watchdog",
+    "hookmonitor",
+    "reinstall",
+):
+    if forbidden.lower() in hook.lower():
+        raise SystemExit(
+            "Windows compatibility check failed: leaf transport leaked into hook orchestration: "
+            + forbidden
+        )
 
-injected = re.search(r"if data\.dwExtraInfo == EXTRA\s*\{([^}]*)\}", body, re.S)
-if injected and re.search(r"\breturn\s+1\b", injected.group(1)):
-    raise SystemExit("Windows hook check failed: self-injected input is suppressed")
+for required in (
+    "LLKHF_INJECTED",
+    "may_support_text",
+    "capture(target",
+    "FinalizeWithDelimiter",
+):
+    if required not in hook:
+        raise SystemExit(
+            "Windows compatibility check failed: hook orchestration primitive missing: "
+            + required
+        )
 
-if "thread::yield_now" in text:
-    raise SystemExit("Windows hook check failed: busy ready wait")
+for required in (
+    "EM_GETSEL",
+    "EM_SETSEL",
+    "EM_REPLACESEL",
+    "ES_PASSWORD",
+    "ES_READONLY",
+):
+    if required not in native:
+        raise SystemExit(
+            "Windows compatibility check failed: native-range safety primitive missing: "
+            + required
+        )
 
-production = text.lower()
-for forbidden_product_feature in (
+for required in (
+    "CurrentIsPassword",
+    "CurrentIsReadOnly",
+    "CurrentHasKeyboardFocus",
+    "CurrentProcessId",
+    "GetFocusedElement",
+    "ValuePattern",
+    "TextPattern",
+):
+    if required not in uia:
+        raise SystemExit(
+            "Windows compatibility check failed: UI Automation capability guard missing: "
+            + required
+        )
+
+for required in (
+    "thread_has_tsf",
+    "native::OwnedRange::capture",
+    "capture_focused",
+    "OwnedTransport::Automation",
+    "OwnedTransport::Synthetic",
+    "chrome_widgetwin_1",
     "rail_window",
     "tscshellcontainerclass",
     "tscaxhostclass",
-    "wslg",
-    "remoteapp",
-    "isremotewindow",
 ):
-    if forbidden_product_feature in production:
+    if required.lower() not in resolver.lower():
         raise SystemExit(
-            "Windows hook check failed: removed remote/browser handoff feature reappeared: "
-            + forbidden_product_feature
+            "Windows compatibility check failed: capability resolver primitive missing: "
+            + required
         )
 
-for forbidden_watchdog in ("settimer(", "wm_timer", "reinstall", "hookmonitor"):
-    if forbidden_watchdog in production:
+native_pos = resolver.find("native::OwnedRange::capture")
+uia_pos = resolver.find("capture_focused")
+synthetic_pos = resolver.rfind("synthetic::OwnedSynthetic::capture")
+if not (0 <= native_pos < uia_pos < synthetic_pos):
+    raise SystemExit(
+        "Windows compatibility check failed: resolver order must prefer native range, "
+        "then UI Automation, then synthetic fallback"
+    )
+
+for required in (
+    "SendInput",
+    "KEYEVENTF_UNICODE",
+    "GetForegroundWindow",
+    "GetAncestor",
+    "INPUTKEY_SYNTHETIC_TAG",
+):
+    if required not in synthetic:
         raise SystemExit(
-            "Windows hook check failed: timeout/watchdog recovery is forbidden: "
-            + forbidden_watchdog
+            "Windows compatibility check failed: isolated synthetic transport missing: "
+            + required
         )
 
-print("Windows hook static source check passed")
+for forbidden in (
+    "SetTimer(",
+    "WM_TIMER",
+    "watchdog",
+    "OpenClipboard",
+    "SetClipboardData",
+):
+    if forbidden.lower() in synthetic.lower():
+        raise SystemExit(
+            "Windows compatibility check failed: synthetic leaf contains unrelated mechanism: "
+            + forbidden
+        )
+
+for required in (
+    "OleGetClipboard",
+    "OleSetClipboard",
+    "GetClipboardSequenceNumber",
+    "WM_PASTE",
+):
+    if required not in clipboard:
+        raise SystemExit(
+            "Windows compatibility check failed: clipboard preservation missing: "
+            + required
+        )
+
+if "decision_boundary" not in transition:
+    raise SystemExit(
+        "Windows compatibility check failed: delimiter semantics bypass the root engine"
+    )
+
+print(
+    "Windows compatibility transport check passed: callback stays nonblocking; "
+    "resolver prefers native range/UIA and isolates synthetic fallback."
+)

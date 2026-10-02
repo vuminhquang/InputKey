@@ -5,14 +5,27 @@ members = [
     "Operators",
     "Implementations/EnglishBloom",
     "Implementations/EventBus",
+    "Implementations/LanguagePackLoader",
+    "Implementations/LanguagePackNativeABI",
+    "Implementations/Languages/Vietnamese",
+    "Implementations/Languages/French",
     "Implementations/WindowsHook",
+    "Implementations/WindowsSettings",
+    "Implementations/WindowsControl",
+    "Implementations/WindowsClipboard",
+    "Implementations/WindowsTSF",
+    "Bootstrap/LanguagePackABI",
+    "Bootstrap/LanguagePacks/French",
+    "Bootstrap/LanguagePacks/Vietnamese",
+    "Bootstrap/Runtime",
     "Bootstrap/CABI",
     "Bootstrap/WASM",
-    "Bootstrap/WindowsHook",
+    "Bootstrap/WindowsTSF",
+    "Bootstrap/WindowsControl",
 ]
 resolver = "2"
 
 [workspace.package]
-version = "5.0.0"
+version = "5.1.0"
 edition = "2021"
 license = "GPL-2.0-or-later"

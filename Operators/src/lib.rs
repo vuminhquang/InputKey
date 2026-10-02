@@ -1,9 +1,9 @@
-//! InputKey deterministic Vietnamese typing operators.
+//! Language-independent InputKey composition operators.
 
-mod fsm;
 mod replay;
+mod root;
 mod session;
 
-pub use fsm::{process, Machine};
 pub use replay::{replay, ReplayResult};
+pub use root::Machine;
 pub use session::Session;

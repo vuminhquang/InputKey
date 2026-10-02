@@ -7,15 +7,11 @@ int main(int argc, const char *argv[]) {
 
     @autoreleasepool {
         [[NSUserDefaults standardUserDefaults] registerDefaults:@{
+            @"InputKeyLanguage": @"vi",
             @"InputKeyMethod": @"telex",
             @"InputKeySimpleTelex": @NO,
             @"InputKeyAutoRestore": @YES,
-            @"InputKeyLiteralizeShortcutEnabled": @YES,
-            @"InputKeyLiteralizeShortcutKeyCode": @41,
-            @"InputKeyLiteralizeShortcutControl": @YES,
-            @"InputKeyLiteralizeShortcutOption": @NO,
-            @"InputKeyLiteralizeShortcutShift": @NO,
-            @"InputKeyLiteralizeShortcutCommand": @NO,
+            @"InputKeySmartCorrection": @YES,
         }];
 
         NSApplication *app = [NSApplication sharedApplication];

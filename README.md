@@ -1,39 +1,33 @@
 # InputKey
 
-**Free & Open Source Vietnamese Keyboard**
+**Free & Open Source Multilingual Input Method**
 
 > Gõ tiếng Việt theo tốc độ tư duy của bạn.
 
-InputKey is a Rust-first Vietnamese input method with one typing engine shared across browser, Windows, Linux, and macOS.
+InputKey is a Rust-first multilingual input method with one language-independent root composition machine shared across browser, Windows, Linux, and macOS. Vietnamese is the default language; French Telex is bundled in 5.1.
 
 ## Platforms
 
 - **Chrome / Edge** — Manifest V3 extension backed by Rust WebAssembly.
-- **Windows** — native keyboard integration with a tray app.
+- **Windows** — TSF text service with automatic target-aware text transports and a tray app.
 - **Linux** — Fcitx5 and IBus adapters over the Rust C ABI.
 - **macOS** — native InputMethodKit input method over the Rust C ABI.
 
-## Whole-word undo
+## Composition boundaries
 
-InputKey can restore the current token to the physical keys that produced it.
+InputKey follows normal IME boundary behavior instead of keeping a separate token mode. While a token is active:
 
-Example:
+- **Space and punctuation** finalize the word, including Auto Restore / high-confidence correction, then insert the delimiter.
+- **Enter, Tab, arrows, Home/End, Page Up/Down, and Delete** commit exactly the text currently displayed, end composition, and let that same key continue to the application.
+- **Shift+Space** is a one-shot raw escape: it commits the physical keystroke sequence for the current token, consumes the Space keystroke, and ends composition.
 
-```text
-physical keys: refer
-rendered:      rể
-shortcut:      whole-word undo
-result:        refer
-```
+For example, `dd` displays `đ`; pressing an arrow commits `đ` and then moves the caret. `refer` may display `rể`; pressing Shift+Space commits `refer`.
 
-Defaults:
+## Windows input paths
 
-- Chrome / Edge: **Ctrl+Space**
-- Windows: **Ctrl+Space**
-- macOS: **Control+;**
-- Linux: **Ctrl+Space**
+Windows uses the TSF text service as the primary input path. Installing or updating the text service may require one UAC approval; normal typing and the tray app run as the current user. Applications that were already running when the text service was first installed may need to be restarted once so their TSF thread manager can load InputKey. This includes Windows Terminal if it was already open before InputKey's text service was installed.
 
-The shortcut is configurable and can be disabled.
+When TSF is unavailable for the focused target, InputKey probes target capabilities instead of routing by application name. It prefers owned native edit ranges, then UI Automation editable patterns, and uses an isolated synthetic transport only for compatible fallback surfaces such as Remote Desktop or custom Chromium render surfaces. Clipboard-backed paste remains a guarded secondary transport for supported native edits. Password and read-only fields are excluded, injected InputKey events are ignored by the hook, and clipboard restoration never overwrites a newer clipboard change made by another application.
 
 ## Typing behavior
 
@@ -47,9 +41,10 @@ The shared engine supports:
 - repeat-to-cancel
 - English collision recovery
 - Backspace/Escape reconstruction
-- whole-word undo
+- natural IME composition boundaries and one-shot Shift+Space raw escape
+- high-confidence intent correction, enabled by default on Windows
 
-Regression coverage includes cases such as `pass → pas`, `passs → pass`, `password → password`, `urrl → url`, `assk → ask`, `affter → after`, `exxe → exe`, and `ajjax → ajax`.
+The intent resolver can recover ordering-independent Telex sequences without inventing missing tone input, including `nhieue → nhiêu`, `chueyern → chuyển`, and `dduocwj → được`. Regression coverage also includes `pass → pas`, `passs → pass`, `password → password`, `urrl → url`, `assk → ask`, `affter → after`, `exxe → exe`, and `ajjax → ajax`.
 
 ## Privacy
 
@@ -92,12 +87,6 @@ macOS:
 ./Bootstrap/Build/install-macos.sh
 ```
 
-Linux shortcut parser smoke test:
-
-```sh
-./Bootstrap/Build/test-linux-shortcut.sh
-```
-
 Linux Fcitx5 and IBus adapters are built with CMake after building `inputkey-cabi`.
 
 GitHub Actions validates Linux, Windows, macOS, and Chromium builds. Version tags (`v*`) publish GitHub Release artifacts automatically.
@@ -106,25 +95,13 @@ GitHub Actions validates Linux, Windows, macOS, and Chromium builds. Version tag
 
 - `Boundary/` — engine input/output contracts
 - `CoreAbstractions/` — shared interfaces and state types
-- `Operators/` — typing engine
+- `Operators/` — language-independent root composition machine
+- `Implementations/Languages/` — language-specific child machines
+- `Implementations/LanguagePackLoader/` — native dynamic language-pack discovery
 - `Implementations/` — browser/OS integrations
 - `Bootstrap/` — entry points and build tooling
 
 See [ARCHITECTURE.md](ARCHITECTURE.md) for a short component overview.
-
-## Development approach
-
-InputKey is organized with **Abstract Driven Development (A.D.D) V3**:
-
-- A.D.D V3: https://abstractdriven.com/
-- A.D.D quick reference: https://abstractdriven.com/llms.txt
-
-Related work from the same project:
-
-- **XS3 — the first agent-centric language:** https://abstractdriven.com/xs3
-- XS3 language reference: https://abstractdriven.com/llms-language.txt
-
-These links provide attribution while this repository keeps its own architecture notes concise.
 
 ## License
 

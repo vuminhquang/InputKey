@@ -1,0 +1,26 @@
+[package]
+name = "inputkey-windows-control-bootstrap"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "InputKey"
+path = "src/main.rs"
+
+[dependencies]
+inputkey-core-abstractions = { path = "../../CoreAbstractions" }
+inputkey-runtime = { path = "../Runtime" }
+inputkey-windows-control = { path = "../../Implementations/WindowsControl" }
+inputkey-windows-hook = { path = "../../Implementations/WindowsHook" }
+inputkey-windows-tsf = { path = "../../Implementations/WindowsTSF" }
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.59", features = [
+    "Win32_Foundation",
+    "Win32_System_Com",
+    "Win32_System_Registry",
+    "Win32_System_Threading",
+    "Win32_UI_Shell",
+    "Win32_UI_WindowsAndMessaging",
+] }

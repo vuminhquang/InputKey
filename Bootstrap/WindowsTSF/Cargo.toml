@@ -1,0 +1,30 @@
+[package]
+name = "inputkey-windows-tsf-bootstrap"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lib]
+name = "InputKeyTSF"
+crate-type = ["cdylib", "rlib"]
+path = "src/lib.rs"
+
+[[bin]]
+name = "InputKeyTSFRegister"
+path = "src/bin/register.rs"
+
+[[bin]]
+name = "InputKeyTSFSmokeHost"
+path = "src/bin/smoke_host.rs"
+
+[dependencies]
+inputkey-core-abstractions = { path = "../../CoreAbstractions" }
+inputkey-runtime = { path = "../Runtime" }
+inputkey-windows-tsf = { path = "../../Implementations/WindowsTSF" }
+
+[target.'cfg(windows)'.dependencies]
+windows = { version = "0.62.2", features = [
+    "Win32_Foundation",
+    "Win32_System_Com",
+] }
+windows-core = "0.62.2"

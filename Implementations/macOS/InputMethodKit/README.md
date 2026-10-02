@@ -1,6 +1,6 @@
 # InputKey for macOS
 
-This leaf is a native InputMethodKit adapter over InputKey's Rust C ABI. It owns macOS event, preedit, and commit integration; Vietnamese typing rules remain in `Operators`.
+This leaf is a native InputMethodKit adapter over InputKey's Rust C ABI. It owns macOS event, preedit, commit, and menu integration. The root composition machine and language-specific child machines remain in Rust.
 
 ## Build
 
@@ -22,14 +22,10 @@ cp -R dist/macos/InputKey.app "$HOME/Library/Input Methods/"
 
 Then log out/in (or restart the text input services), open **System Settings → Keyboard → Text Input → Edit**, and add **InputKey**.
 
-## Literalize shortcut
+## Composition boundaries
 
-The default whole-token shortcut is **Control+;** (physical key code 41 on ANSI Mac keyboards). It invokes `LiteralizeToken`: the current transformed token becomes its full raw physical keystrokes without inserting a semicolon. Example: `refer → rể → Control+; → refer`.
-
-Open the InputKey menu and choose **Hoàn tác dấu của từ: <shortcut>** to record a new gesture. Press the desired modifier keys, then the non-modifier key; its keyDown is consumed. Escape cancels. At least one modifier is required. The menu checkbox enables or disables the shortcut, and **Reset shortcut → Control+;** restores the default.
-
-You may choose Ctrl+Space in the recorder, but macOS may reserve it for switching input sources. If InputKey does not receive it, change or disable **Select the previous input source** in **System Settings → Keyboard → Keyboard Shortcuts → Input Sources**.
+Space and punctuation finalize the current word. Arrow/navigation keys, Tab, Return, and keypad Enter commit the currently displayed marked text and then let the original key continue to the client. Shift+Space is a fixed one-shot raw boundary: it commits only the physical keystroke sequence, consumes the Space keystroke, and ends composition.
 
 ## Configuration
 
-The InputKey menu provides Telex/VNI selection, Auto Restore, and shortcut preferences. Shortcut settings are persisted in `NSUserDefaults`; they do not rebuild or reset the Rust core.
+The InputKey menu is generated from the language catalog and provides language, method, and language-owned options. These preferences are persisted in `NSUserDefaults`; the Objective-C adapter does not contain Vietnamese or French typing rules.

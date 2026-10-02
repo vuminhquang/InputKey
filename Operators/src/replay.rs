@@ -1,7 +1,7 @@
-use inputkey_boundary::{InputEvent, Options, OutputDto};
-use inputkey_core_abstractions::{EventPublisher, LexiconPort};
+use inputkey_boundary::{InputEvent, OutputDto};
+use inputkey_core_abstractions::EventPublisher;
 
-use crate::Session;
+use crate::{Machine, Session};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ReplayResult {
@@ -10,12 +10,11 @@ pub struct ReplayResult {
 }
 
 pub fn replay(
-    options: Options,
+    machine: Machine,
     inputs: &[InputEvent],
-    lexicon: Option<Box<dyn LexiconPort>>,
     publisher: Option<Box<dyn EventPublisher>>,
 ) -> ReplayResult {
-    let mut session = Session::new(options, lexicon, publisher);
+    let mut session = Session::new(machine, publisher);
     let outputs = inputs
         .iter()
         .cloned()

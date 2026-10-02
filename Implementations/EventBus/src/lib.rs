@@ -63,7 +63,7 @@ impl EventSubscriber for EventBus {
 mod tests {
     use std::sync::{Arc, Mutex};
 
-    use inputkey_core_abstractions::{CoreEventType, EngineState, Mode, Phase, Tone};
+    use inputkey_core_abstractions::{CoreEventType, EngineState, RootPhase};
 
     use super::*;
 
@@ -73,14 +73,12 @@ mod tests {
             sequence: 1,
             text: text.to_owned(),
             state: EngineState {
-                mode: Mode::Start,
-                phase: Phase::Start,
+                language_id: "vi".into(),
+                phase: RootPhase::Idle,
                 raw: String::new(),
-                fallback: String::new(),
                 rendered: String::new(),
-                tone: Tone::None,
-                ambiguous: false,
-                transformed: false,
+                child_mode: "start".into(),
+                child_phase: "start".into(),
             },
         }
     }

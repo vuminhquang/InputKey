@@ -1,13 +1,7 @@
 # InputKey WindowsHook
 
-This crate is the Windows native transport leaf. It owns Win32 integration, a bounded
-SPSC queue, exact-modifier shortcut matching, and the minimal `EnginePort` contract.
-The Bootstrap crate adapts `Session` to that contract; Vietnamese typing policy remains
-in Operators. Literalize defaults to Ctrl+Space; its recorder accepts a physical virtual
-key only when at least one modifier is held and Escape cancels. User preferences belong
-under the per-user `HKCU\\Software\\InputKey\\Settings` key. Startup registration uses
-the per-user Run key and an explicitly quoted executable path.
+This crate captures compatibility input only when the focused Windows target cannot use the InputKey TSF path. Target handling is automatic; users do not choose a compatibility transport.
 
-Browser, RDP, WSLg, RemoteApp, and remote-window handoff behavior is not part of this app.
-Shutdown must be state/signaled and joined; hook callbacks must never invoke engine or
-synthetic-input functions.
+The hook callback only classifies and queues physical input. Text mutation stays on the worker. Supported native Edit/RichEdit/Windows Forms controls use owned selection ranges first and guarded clipboard paste only as a secondary transport. Windows Search is handled through UI Automation. Explicit Remote Desktop window classes (`RAIL_WINDOW`, `TscShellContainerClass`, and `TscAxHostClass`) may use the isolated synthetic transport as a last resort; InputKey-tagged injected input is ignored by the low-level hook.
+
+Password and read-only native edit controls are excluded. Queue back-pressure fails open instead of blocking the hook thread. Shutdown is signaled and joined; there is no timer/watchdog transport recovery loop.

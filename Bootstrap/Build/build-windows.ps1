@@ -1,6 +1,14 @@
 $ErrorActionPreference = "Stop"
 $Root = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
-$Dist = Join-Path $Root "dist\windows"
+$VersionLine = Select-String -Path (Join-Path $Root "Cargo.toml") -Pattern '^version = "([^"]+)"$' | Select-Object -First 1
+if (-not $VersionLine) { throw "Workspace version not found" }
+$Version = $VersionLine.Matches[0].Groups[1].Value
+$Target = Join-Path $Root ("target\windows-" + $Version)
+$Stage = Join-Path $env:TEMP ("InputKey-Windows-" + $Version + "-" + $PID)
+$DistDir = Join-Path $Root ("dist\InputKey-Windows-" + $Version)
+$Zip = Join-Path $Root ("dist\InputKey-Windows-" + $Version + ".zip")
+$DistExe = Join-Path $DistDir "InputKey.exe"
+$RestartInputKey = $false
 
 Push-Location $Root
 try {
@@ -8,19 +16,53 @@ try {
     if ($LASTEXITCODE) { throw "Architecture check failed" }
 
     python Bootstrap\Build\check-windows-hook.py
-    if ($LASTEXITCODE) { throw "Windows hook hot-path check failed" }
+    if ($LASTEXITCODE) { throw "Windows compatibility check failed" }
 
-    cargo test -p inputkey-windows-hook -p inputkey-windows-app
+    python Bootstrap\Build\check-windows-tsf.py
+    if ($LASTEXITCODE) { throw "Windows TSF contract check failed" }
+
+    cargo test -p inputkey-windows-settings -p inputkey-windows-clipboard -p inputkey-windows-hook -p inputkey-windows-control -p inputkey-windows-tsf -p inputkey-windows-tsf-bootstrap -p inputkey-windows-control-bootstrap
     if ($LASTEXITCODE) { throw "Windows tests failed" }
 
-    cargo build --release -p inputkey-windows-app
-    if ($LASTEXITCODE) { throw "Windows release build failed" }
+    cargo build --release --target-dir $Target -p inputkey-windows-control-bootstrap --bin InputKey
+    if ($LASTEXITCODE) { throw "Windows control release build failed" }
 
-    New-Item -ItemType Directory -Force $Dist | Out-Null
-    Copy-Item "target\release\InputKey.exe" (Join-Path $Dist "InputKey.exe") -Force
-    Copy-Item "Implementations\WindowsHook\inputkey-v.ico" $Dist -Force
-    Copy-Item "Implementations\WindowsHook\inputkey-e.ico" $Dist -Force
-    Write-Host "Built $(Join-Path $Dist 'InputKey.exe')"
+    cargo build --release --target-dir $Target -p inputkey-windows-tsf-bootstrap --lib --bin InputKeyTSFRegister
+    if ($LASTEXITCODE) { throw "Windows TSF release build failed" }
+
+    cargo build --release --target-dir $Target -p inputkey-language-pack-vietnamese -p inputkey-language-pack-french
+    if ($LASTEXITCODE) { throw "Language pack release build failed" }
+
+    if (Test-Path $Stage) { Remove-Item $Stage -Recurse -Force }
+    New-Item -ItemType Directory -Force $Stage | Out-Null
+    Copy-Item (Join-Path $Target "release\InputKey.exe") $Stage
+    Copy-Item (Join-Path $Target "release\InputKeyTSF.dll") $Stage
+    Copy-Item (Join-Path $Target "release\InputKeyTSFRegister.exe") $Stage
+    Copy-Item "Implementations\WindowsHook\inputkey-v.ico" $Stage
+    Copy-Item "Implementations\WindowsHook\inputkey-e.ico" $Stage
+    $Languages = Join-Path $Stage "languages"
+    New-Item -ItemType Directory -Force $Languages | Out-Null
+    Copy-Item (Join-Path $Target "release\InputKeyLanguageVietnamese.dll") $Languages
+    Copy-Item (Join-Path $Target "release\InputKeyLanguageFrench.dll") $Languages
+
+    New-Item -ItemType Directory -Force (Split-Path $Zip) | Out-Null
+    $RunningDistInputKey = Get-Process InputKey -ErrorAction SilentlyContinue | Where-Object { $_.Path -eq $DistExe }
+    if ($RunningDistInputKey) {
+        $RunningDistInputKey | Stop-Process -Force
+        $RestartInputKey = $true
+        Start-Sleep -Milliseconds 250
+    }
+    if (Test-Path $DistDir) { Remove-Item $DistDir -Recurse -Force }
+    Copy-Item $Stage $DistDir -Recurse -Force
+    if (Test-Path $Zip) { Remove-Item $Zip -Force }
+    Compress-Archive -Path (Join-Path $Stage "*") -DestinationPath $Zip
+
+    Write-Host "Packaged $Zip"
 } finally {
+    if ($RestartInputKey -and (Test-Path $DistExe)) {
+        $AlreadyRunning = Get-Process InputKey -ErrorAction SilentlyContinue | Where-Object { $_.Path -eq $DistExe }
+        if (-not $AlreadyRunning) { Start-Process $DistExe }
+    }
+    if (Test-Path $Stage) { Remove-Item $Stage -Recurse -Force -ErrorAction SilentlyContinue }
     Pop-Location
 }

@@ -18,10 +18,20 @@ static NSRange InputKeyNoReplacementRange(void) {
 static NSString *InputKeyStringFromCommand(uint64_t handle, InputKeyCommand command) {
     const size_t required = command(handle, NULL, 0);
     uint8_t *buffer = calloc(required + 1, sizeof(uint8_t));
-    if (buffer == NULL) {
-        return @"";
-    }
+    if (buffer == NULL) return @"";
     command(handle, buffer, required + 1);
+    NSString *result = [[NSString alloc] initWithBytes:buffer
+                                               length:required
+                                             encoding:NSUTF8StringEncoding];
+    free(buffer);
+    return result ?: @"";
+}
+
+static NSString *InputKeyCatalogJSON(void) {
+    const size_t required = inputkey_catalog_json(NULL, 0);
+    uint8_t *buffer = calloc(required + 1, sizeof(uint8_t));
+    if (buffer == NULL) return @"";
+    inputkey_catalog_json(buffer, required + 1);
     NSString *result = [[NSString alloc] initWithBytes:buffer
                                                length:required
                                              encoding:NSUTF8StringEncoding];
@@ -31,14 +41,11 @@ static NSString *InputKeyStringFromCommand(uint64_t handle, InputKeyCommand comm
 
 static NSString *InputKeyStringFromKey(uint64_t handle, NSString *key) {
     NSData *data = [key dataUsingEncoding:NSUTF8StringEncoding];
-    const uint8_t *bytes = data.bytes;
-    const size_t length = data.length;
-    const size_t required = inputkey_key_utf8(handle, bytes, length, NULL, 0);
+    const size_t required = inputkey_key_utf8(
+        handle, data.bytes, data.length, NULL, 0);
     uint8_t *buffer = calloc(required + 1, sizeof(uint8_t));
-    if (buffer == NULL) {
-        return @"";
-    }
-    inputkey_key_utf8(handle, bytes, length, buffer, required + 1);
+    if (buffer == NULL) return @"";
+    inputkey_key_utf8(handle, data.bytes, data.length, buffer, required + 1);
     NSString *result = [[NSString alloc] initWithBytes:buffer
                                                length:required
                                              encoding:NSUTF8StringEncoding];
@@ -46,18 +53,30 @@ static NSString *InputKeyStringFromKey(uint64_t handle, NSString *key) {
     return result ?: @"";
 }
 
+static NSString *InputKeyDecisionBoundary(uint64_t handle, NSString *delimiter) {
+    NSData *data = [delimiter dataUsingEncoding:NSUTF8StringEncoding];
+    const size_t required = inputkey_decision_boundary_utf8(
+        handle, data.bytes, data.length, NULL, 0);
+    uint8_t *buffer = calloc(required + 1, sizeof(uint8_t));
+    if (buffer == NULL) return @"";
+    inputkey_decision_boundary_utf8(
+        handle, data.bytes, data.length, buffer, required + 1);
+    NSString *result = [[NSString alloc] initWithBytes:buffer
+                                               length:required
+                                             encoding:NSUTF8StringEncoding];
+    free(buffer);
+    return result ?: @"";
+}
+
+static BOOL InputKeyAcceptsKey(uint64_t handle, NSString *key) {
+    NSData *data = [key dataUsingEncoding:NSUTF8StringEncoding];
+    return inputkey_accepts_key_utf8(handle, data.bytes, data.length) != 0;
+}
+
 @interface InputKeyInputController () {
     uint64_t _core;
-    BOOL _recordingLiteralizeShortcut;
 }
 @end
-
-static NSString *const InputKeyShortcutEnabled = @"InputKeyLiteralizeShortcutEnabled";
-static NSString *const InputKeyShortcutCode = @"InputKeyLiteralizeShortcutKeyCode";
-static NSString *const InputKeyShortcutControl = @"InputKeyLiteralizeShortcutControl";
-static NSString *const InputKeyShortcutOption = @"InputKeyLiteralizeShortcutOption";
-static NSString *const InputKeyShortcutShift = @"InputKeyLiteralizeShortcutShift";
-static NSString *const InputKeyShortcutCommand = @"InputKeyLiteralizeShortcutCommand";
 
 @implementation InputKeyInputController
 
@@ -65,9 +84,7 @@ static NSString *const InputKeyShortcutCommand = @"InputKeyLiteralizeShortcutCom
                       delegate:(id)delegate
                         client:(id)inputClient {
     self = [super initWithServer:server delegate:delegate client:inputClient];
-    if (self != nil) {
-        [self rebuildCore];
-    }
+    if (self != nil) [self rebuildCore];
     return self;
 }
 
@@ -78,20 +95,68 @@ static NSString *const InputKeyShortcutCommand = @"InputKeyLiteralizeShortcutCom
     }
 }
 
+- (NSArray<NSDictionary *> *)languages {
+    NSData *data = [InputKeyCatalogJSON() dataUsingEncoding:NSUTF8StringEncoding];
+    if (data.length == 0) return @[];
+    NSDictionary *root = [NSJSONSerialization JSONObjectWithData:data options:0 error:nil];
+    NSArray *languages = [root isKindOfClass:[NSDictionary class]] ? root[@"languages"] : nil;
+    return [languages isKindOfClass:[NSArray class]] ? languages : @[];
+}
+
+- (NSDictionary *)languageMetadata:(NSString *)languageID {
+    for (NSDictionary *language in [self languages]) {
+        if ([language[@"id"] isEqualToString:languageID]) return language;
+    }
+    return [self languages].firstObject;
+}
+
+- (NSString *)configuredLanguage {
+    NSString *language = [[NSUserDefaults standardUserDefaults] stringForKey:@"InputKeyLanguage"];
+    return language.length ? language : @"vi";
+}
+
 - (NSString *)configuredMethod {
-    NSString *method = [[NSUserDefaults standardUserDefaults] stringForKey:@"InputKeyMethod"];
-    return [method isEqualToString:@"vni"] ? @"vni" : @"telex";
+    NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
+    NSString *method = [defaults stringForKey:@"InputKeyMethod"];
+    NSDictionary *language = [self languageMetadata:[self configuredLanguage]];
+    NSArray *methods = language[@"methods"];
+    for (NSDictionary *candidate in methods) {
+        if ([candidate[@"id"] isEqualToString:method]) return method;
+    }
+    NSString *fallback = language[@"defaultMethod"];
+    return fallback.length ? fallback : @"telex";
+}
+
+- (NSString *)defaultsKeyForOption:(NSString *)optionID {
+    if ([optionID isEqualToString:@"simple_telex"]) return @"InputKeySimpleTelex";
+    if ([optionID isEqualToString:@"auto_restore"]) return @"InputKeyAutoRestore";
+    if ([optionID isEqualToString:@"smart_correction"]) return @"InputKeySmartCorrection";
+    return [@"InputKeyOption." stringByAppendingString:optionID ?: @""];
+}
+
+- (NSString *)optionsJSON {
+    NSDictionary *language = [self languageMetadata:[self configuredLanguage]];
+    NSMutableDictionary *values = [NSMutableDictionary dictionary];
+    NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
+    for (NSDictionary *option in language[@"options"] ?: @[]) {
+        NSString *optionID = option[@"id"];
+        if (!optionID.length) continue;
+        NSString *key = [self defaultsKeyForOption:optionID];
+        if ([defaults objectForKey:key] == nil) {
+            [defaults setBool:[option[@"defaultEnabled"] boolValue] forKey:key];
+        }
+        values[optionID] = @([defaults boolForKey:key]);
+    }
+    NSData *data = [NSJSONSerialization dataWithJSONObject:values options:0 error:nil];
+    return data ? [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding] : @"{}";
 }
 
 - (void)rebuildCore {
-    if (_core != 0) {
-        inputkey_destroy(_core);
-    }
-    NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
+    if (_core != 0) inputkey_destroy(_core);
+    NSString *language = [self configuredLanguage];
     NSString *method = [self configuredMethod];
-    const int simpleTelex = [defaults boolForKey:@"InputKeySimpleTelex"] ? 1 : 0;
-    const int autoRestore = [defaults boolForKey:@"InputKeyAutoRestore"] ? 1 : 0;
-    _core = inputkey_create(method.UTF8String, simpleTelex, autoRestore);
+    NSString *options = [self optionsJSON];
+    _core = inputkey_create_ex(language.UTF8String, method.UTF8String, options.UTF8String);
 }
 
 - (BOOL)hasActiveToken {
@@ -111,164 +176,80 @@ static NSString *const InputKeyShortcutCommand = @"InputKeyLiteralizeShortcutCom
 }
 
 - (void)commitCurrentTokenFinalizing:(BOOL)finalize client:(id)sender {
-    if (![self hasActiveToken]) {
-        return;
-    }
+    if (![self hasActiveToken]) return;
     NSString *text = finalize
         ? InputKeyStringFromCommand(_core, inputkey_finalize)
-        : InputKeyStringFromCommand(_core, inputkey_rendered);
+        : InputKeyStringFromCommand(_core, inputkey_commit_displayed);
     [self commitText:text client:sender];
-    inputkey_reset(_core);
-}
-
-- (BOOL)isTokenCharacter:(unichar)c {
-    if ([[self configuredMethod] isEqualToString:@"vni"]) {
-        return (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9');
-    }
-    return (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || c == '[' || c == ']';
+    if (finalize) inputkey_reset(_core);
 }
 
 - (BOOL)isNavigationKeyCode:(unsigned short)keyCode {
     switch (keyCode) {
-        case 115: // Home
-        case 116: // Page Up
-        case 117: // Forward Delete
-        case 119: // End
-        case 121: // Page Down
-        case 123: // Left
-        case 124: // Right
-        case 125: // Down
-        case 126: // Up
+        case 115: case 116: case 117: case 119: case 121:
+        case 123: case 124: case 125: case 126:
             return YES;
         default:
             return NO;
     }
 }
 
-- (NSEventModifierFlags)configuredShortcutModifiers {
-    NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
-    NSEventModifierFlags modifiers = 0;
-    if ([defaults boolForKey:InputKeyShortcutControl]) modifiers |= NSEventModifierFlagControl;
-    if ([defaults boolForKey:InputKeyShortcutOption]) modifiers |= NSEventModifierFlagOption;
-    if ([defaults boolForKey:InputKeyShortcutShift]) modifiers |= NSEventModifierFlagShift;
-    if ([defaults boolForKey:InputKeyShortcutCommand]) modifiers |= NSEventModifierFlagCommand;
-    return modifiers;
-}
-
-- (NSString *)shortcutLabel {
-    NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
-    NSMutableString *label = [NSMutableString string];
-    if ([defaults boolForKey:InputKeyShortcutControl]) [label appendString:@"⌃"];
-    if ([defaults boolForKey:InputKeyShortcutOption]) [label appendString:@"⌥"];
-    if ([defaults boolForKey:InputKeyShortcutShift]) [label appendString:@"⇧"];
-    if ([defaults boolForKey:InputKeyShortcutCommand]) [label appendString:@"⌘"];
-    unsigned short code = (unsigned short)[defaults integerForKey:InputKeyShortcutCode];
-    NSString *key = code == 41 ? @";" : (code == 49 ? @"Space" : [NSString stringWithFormat:@"Key %hu", code]);
-    [label appendString:key];
-    return label;
-}
-
-- (BOOL)recordShortcutFromEvent:(NSEvent *)event {
-    NSEventModifierFlags flags = event.modifierFlags & NSEventModifierFlagDeviceIndependentFlagsMask;
-    if (event.keyCode == 53) {
-        _recordingLiteralizeShortcut = NO;
-        return YES;
-    }
-    // Modifier-only key events do not select the key; wait for the next non-modifier.
-    if (event.keyCode == 54 || event.keyCode == 55 || event.keyCode == 56 || event.keyCode == 57 ||
-        event.keyCode == 58 || event.keyCode == 59 || event.keyCode == 60 || event.keyCode == 61 ||
-        event.keyCode == 62 || event.keyCode == 63) return YES;
-    NSEventModifierFlags modifiers = flags & (NSEventModifierFlagControl | NSEventModifierFlagOption |
-        NSEventModifierFlagShift | NSEventModifierFlagCommand);
-    if (modifiers == 0) return YES;
-    NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
-    [defaults setInteger:event.keyCode forKey:InputKeyShortcutCode];
-    [defaults setBool:(modifiers & NSEventModifierFlagControl) != 0 forKey:InputKeyShortcutControl];
-    [defaults setBool:(modifiers & NSEventModifierFlagOption) != 0 forKey:InputKeyShortcutOption];
-    [defaults setBool:(modifiers & NSEventModifierFlagShift) != 0 forKey:InputKeyShortcutShift];
-    [defaults setBool:(modifiers & NSEventModifierFlagCommand) != 0 forKey:InputKeyShortcutCommand];
-    [defaults setBool:YES forKey:InputKeyShortcutEnabled];
-    _recordingLiteralizeShortcut = NO;
-    return YES;
-}
-
 - (BOOL)handleEvent:(NSEvent *)event client:(id)sender {
-    if (event.type != NSEventTypeKeyDown) {
-        return NO;
-    }
-
-    if (_recordingLiteralizeShortcut) return [self recordShortcutFromEvent:event];
+    if (event.type != NSEventTypeKeyDown) return NO;
 
     NSEventModifierFlags flags =
         event.modifierFlags & NSEventModifierFlagDeviceIndependentFlagsMask;
     const BOOL control = (flags & NSEventModifierFlagControl) != 0;
     const BOOL option = (flags & NSEventModifierFlagOption) != 0;
     const BOOL command = (flags & NSEventModifierFlagCommand) != 0;
+    const BOOL shift = (flags & NSEventModifierFlagShift) != 0;
 
-    NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
-    NSEventModifierFlags shortcutMask = NSEventModifierFlagControl | NSEventModifierFlagOption |
-        NSEventModifierFlagShift | NSEventModifierFlagCommand;
-    NSEventModifierFlags actualModifiers = flags & shortcutMask;
-    if ([defaults boolForKey:InputKeyShortcutEnabled] &&
-        event.keyCode == (unsigned short)[defaults integerForKey:InputKeyShortcutCode] &&
-        actualModifiers == [self configuredShortcutModifiers]) {
-        if ([self hasActiveToken]) {
-            NSString *raw = InputKeyStringFromCommand(_core, inputkey_literalize_token);
-            [self setMarkedText:raw client:sender];
-            return YES;
-        }
-        return NO;
+    if (event.keyCode == 49 && shift && !control && !option && !command && [self hasActiveToken]) {
+        NSString *raw = InputKeyStringFromCommand(_core, inputkey_commit_raw_boundary);
+        [self commitText:raw client:sender];
+        return YES;
     }
 
     if (control || option || command) {
-        [self commitCurrentTokenFinalizing:YES client:sender];
-        return NO;
-    }
-
-    if (event.keyCode == 51) { // Backspace
-        if (![self hasActiveToken]) {
-            return NO;
-        }
-        NSString *next = InputKeyStringFromCommand(_core, inputkey_backspace);
-        [self setMarkedText:next client:sender];
-        return YES;
-    }
-
-    if (event.keyCode == 53) { // Escape
-        if (![self hasActiveToken]) {
-            return NO;
-        }
-        NSString *next = InputKeyStringFromCommand(_core, inputkey_escape);
-        [self setMarkedText:next client:sender];
-        return YES;
-    }
-
-    if ([self isNavigationKeyCode:event.keyCode]) {
         [self commitCurrentTokenFinalizing:NO client:sender];
         return NO;
     }
 
-    // Tab / Return / keypad Enter finalize the token, then continue to the client.
-    if (event.keyCode == 48 || event.keyCode == 36 || event.keyCode == 76) {
-        [self commitCurrentTokenFinalizing:YES client:sender];
+    if (event.keyCode == 51) {
+        if (![self hasActiveToken]) return NO;
+        [self setMarkedText:InputKeyStringFromCommand(_core, inputkey_backspace) client:sender];
+        return YES;
+    }
+
+    if (event.keyCode == 53) {
+        if (![self hasActiveToken]) return NO;
+        [self setMarkedText:InputKeyStringFromCommand(_core, inputkey_escape) client:sender];
+        return YES;
+    }
+
+    if ([self isNavigationKeyCode:event.keyCode]
+        || event.keyCode == 48 || event.keyCode == 36 || event.keyCode == 76) {
+        [self commitCurrentTokenFinalizing:NO client:sender];
         return NO;
     }
 
     NSString *characters = event.characters ?: @"";
     if (characters.length != 1) {
-        [self commitCurrentTokenFinalizing:YES client:sender];
+        [self commitCurrentTokenFinalizing:NO client:sender];
         return NO;
     }
 
-    const unichar c = [characters characterAtIndex:0];
-    if (c > 0x7f || ![self isTokenCharacter:c]) {
-        [self commitCurrentTokenFinalizing:YES client:sender];
-        return NO;
+    if (InputKeyAcceptsKey(_core, characters)) {
+        [self setMarkedText:InputKeyStringFromKey(_core, characters) client:sender];
+        return YES;
     }
 
-    NSString *next = InputKeyStringFromKey(_core, characters);
-    [self setMarkedText:next client:sender];
-    return YES;
+    if ([self hasActiveToken]) {
+        [self commitText:InputKeyDecisionBoundary(_core, characters) client:sender];
+        return YES;
+    }
+
+    return NO;
 }
 
 - (void)commitComposition:(id)sender {
@@ -276,99 +257,96 @@ static NSString *const InputKeyShortcutCommand = @"InputKeyLiteralizeShortcutCom
 }
 
 - (void)inputControllerWillClose {
-    if (_core != 0) {
-        inputkey_reset(_core);
-    }
+    if (_core != 0) inputkey_reset(_core);
     [super inputControllerWillClose];
 }
 
 - (NSMenu *)menu {
     NSMenu *menu = [[NSMenu alloc] initWithTitle:@"InputKey"];
-    NSString *method = [self configuredMethod];
+    NSString *currentLanguage = [self configuredLanguage];
+    NSDictionary *activeLanguage = [self languageMetadata:currentLanguage];
+    NSString *currentMethod = [self configuredMethod];
 
-    NSMenuItem *telex = [[NSMenuItem alloc] initWithTitle:@"Telex"
-                                                   action:@selector(selectTelex:)
-                                            keyEquivalent:@""];
-    telex.target = self;
-    telex.state = [method isEqualToString:@"telex"] ? NSControlStateValueOn : NSControlStateValueOff;
-    [menu addItem:telex];
+    NSMenu *languageMenu = [[NSMenu alloc] initWithTitle:@"Language"];
+    for (NSDictionary *language in [self languages]) {
+        NSString *title = language[@"nativeName"] ?: language[@"displayName"] ?: language[@"id"];
+        NSMenuItem *item = [[NSMenuItem alloc] initWithTitle:title
+                                                      action:@selector(selectLanguage:)
+                                               keyEquivalent:@""];
+        item.target = self;
+        item.representedObject = language;
+        item.state = [language[@"id"] isEqualToString:currentLanguage]
+            ? NSControlStateValueOn : NSControlStateValueOff;
+        [languageMenu addItem:item];
+    }
+    NSMenuItem *languageRoot = [[NSMenuItem alloc] initWithTitle:@"Language" action:nil keyEquivalent:@""];
+    languageRoot.submenu = languageMenu;
+    [menu addItem:languageRoot];
 
-    NSMenuItem *vni = [[NSMenuItem alloc] initWithTitle:@"VNI"
-                                                 action:@selector(selectVNI:)
-                                          keyEquivalent:@""];
-    vni.target = self;
-    vni.state = [method isEqualToString:@"vni"] ? NSControlStateValueOn : NSControlStateValueOff;
-    [menu addItem:vni];
+    NSMenu *methodMenu = [[NSMenu alloc] initWithTitle:@"Method"];
+    for (NSDictionary *method in activeLanguage[@"methods"] ?: @[]) {
+        NSMenuItem *item = [[NSMenuItem alloc] initWithTitle:method[@"label"] ?: method[@"id"]
+                                                      action:@selector(selectMethod:)
+                                               keyEquivalent:@""];
+        item.target = self;
+        item.representedObject = method[@"id"];
+        item.state = [method[@"id"] isEqualToString:currentMethod]
+            ? NSControlStateValueOn : NSControlStateValueOff;
+        [methodMenu addItem:item];
+    }
+    NSMenuItem *methodRoot = [[NSMenuItem alloc] initWithTitle:@"Method" action:nil keyEquivalent:@""];
+    methodRoot.submenu = methodMenu;
+    [menu addItem:methodRoot];
 
-    [menu addItem:[NSMenuItem separatorItem]];
-
-    NSMenuItem *restore = [[NSMenuItem alloc] initWithTitle:@"Auto Restore"
-                                                     action:@selector(toggleAutoRestore:)
-                                              keyEquivalent:@""];
-    restore.target = self;
-    restore.state = [[NSUserDefaults standardUserDefaults] boolForKey:@"InputKeyAutoRestore"]
-        ? NSControlStateValueOn
-        : NSControlStateValueOff;
-    [menu addItem:restore];
-
-    [menu addItem:[NSMenuItem separatorItem]];
-    NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
-    NSMenuItem *shortcut = [[NSMenuItem alloc] initWithTitle:[NSString stringWithFormat:@"Hoàn tác dấu của từ: %@", [self shortcutLabel]]
-        action:@selector(recordLiteralizeShortcut:) keyEquivalent:@""];
-    shortcut.target = self;
-    [menu addItem:shortcut];
-    NSMenuItem *enabled = [[NSMenuItem alloc] initWithTitle:@"Enable Literalize Shortcut"
-        action:@selector(toggleLiteralizeShortcut:) keyEquivalent:@""];
-    enabled.target = self;
-    enabled.state = [defaults boolForKey:InputKeyShortcutEnabled] ? NSControlStateValueOn : NSControlStateValueOff;
-    [menu addItem:enabled];
-    NSMenuItem *reset = [[NSMenuItem alloc] initWithTitle:@"Reset shortcut → Control+;"
-        action:@selector(resetLiteralizeShortcut:) keyEquivalent:@""];
-    reset.target = self;
-    [menu addItem:reset];
-
+    for (NSDictionary *option in activeLanguage[@"options"] ?: @[]) {
+        NSString *optionID = option[@"id"];
+        if (!optionID.length) continue;
+        NSMenuItem *item = [[NSMenuItem alloc] initWithTitle:option[@"label"] ?: optionID
+                                                      action:@selector(toggleOption:)
+                                               keyEquivalent:@""];
+        item.target = self;
+        item.representedObject = optionID;
+        item.state = [[NSUserDefaults standardUserDefaults]
+            boolForKey:[self defaultsKeyForOption:optionID]]
+            ? NSControlStateValueOn : NSControlStateValueOff;
+        [menu addItem:item];
+    }
     return menu;
 }
 
-- (void)recordLiteralizeShortcut:(id)sender { (void)sender; _recordingLiteralizeShortcut = YES; }
-- (void)toggleLiteralizeShortcut:(id)sender {
-    (void)sender;
-    NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
-    [defaults setBool:![defaults boolForKey:InputKeyShortcutEnabled] forKey:InputKeyShortcutEnabled];
-}
-- (void)resetLiteralizeShortcut:(id)sender {
-    (void)sender;
-    NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
-    [defaults setInteger:41 forKey:InputKeyShortcutCode];
-    [defaults setBool:YES forKey:InputKeyShortcutControl];
-    [defaults setBool:NO forKey:InputKeyShortcutOption];
-    [defaults setBool:NO forKey:InputKeyShortcutShift];
-    [defaults setBool:NO forKey:InputKeyShortcutCommand];
-    [defaults setBool:YES forKey:InputKeyShortcutEnabled];
-}
-
-- (void)selectTelex:(id)sender {
-    (void)sender;
-    if ([[self configuredMethod] isEqualToString:@"telex"]) return;
+- (void)selectLanguage:(NSMenuItem *)sender {
+    NSDictionary *language = sender.representedObject;
+    NSString *languageID = language[@"id"];
+    if (!languageID.length) return;
     [self commitCurrentTokenFinalizing:YES client:[self client]];
-    [[NSUserDefaults standardUserDefaults] setObject:@"telex" forKey:@"InputKeyMethod"];
+    NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
+    [defaults setObject:languageID forKey:@"InputKeyLanguage"];
+    [defaults setObject:language[@"defaultMethod"] ?: @"" forKey:@"InputKeyMethod"];
+    for (NSDictionary *option in language[@"options"] ?: @[]) {
+        NSString *optionID = option[@"id"];
+        if (optionID.length) {
+            [defaults setBool:[option[@"defaultEnabled"] boolValue]
+                       forKey:[self defaultsKeyForOption:optionID]];
+        }
+    }
     [self rebuildCore];
 }
 
-- (void)selectVNI:(id)sender {
-    (void)sender;
-    if ([[self configuredMethod] isEqualToString:@"vni"]) return;
+- (void)selectMethod:(NSMenuItem *)sender {
+    NSString *method = sender.representedObject;
+    if (!method.length || [[self configuredMethod] isEqualToString:method]) return;
     [self commitCurrentTokenFinalizing:YES client:[self client]];
-    [[NSUserDefaults standardUserDefaults] setObject:@"vni" forKey:@"InputKeyMethod"];
+    [[NSUserDefaults standardUserDefaults] setObject:method forKey:@"InputKeyMethod"];
     [self rebuildCore];
 }
 
-- (void)toggleAutoRestore:(id)sender {
-    (void)sender;
+- (void)toggleOption:(NSMenuItem *)sender {
+    NSString *optionID = sender.representedObject;
+    if (!optionID.length) return;
     [self commitCurrentTokenFinalizing:YES client:[self client]];
     NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
-    [defaults setBool:![defaults boolForKey:@"InputKeyAutoRestore"]
-               forKey:@"InputKeyAutoRestore"];
+    NSString *key = [self defaultsKeyForOption:optionID];
+    [defaults setBool:![defaults boolForKey:key] forKey:key];
     [self rebuildCore];
 }
 
