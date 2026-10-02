@@ -6,6 +6,7 @@
 - Made Space/Shift+Space/navigation boundary semantics shared across languages.
 - Reworked Windows compatibility input into capability-based native range, UI Automation, and isolated synthetic transports.
 - Added compatibility support for custom Chromium render surfaces such as Zalo without app-specific routing.
+- Fixed Windows Start/Search compatibility by sharing one STA worker apartment between OLE clipboard fallback and UI Automation.
 - Updated Chrome/Edge WASM to use the same language catalog and root composition contract.
 
 # 5.0.0

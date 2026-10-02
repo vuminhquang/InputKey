@@ -3,7 +3,7 @@ use windows::{
     Win32::{
         System::Com::{
             CoCreateInstance, CoInitializeEx, CoUninitialize, CLSCTX_INPROC_SERVER,
-            COINIT_MULTITHREADED,
+            COINIT_APARTMENTTHREADED,
         },
         UI::Accessibility::{
             CUIAutomation8, IUIAutomation, IUIAutomationElement, IUIAutomationTextPattern,
@@ -42,7 +42,10 @@ impl OwnedText {
 impl AutomationText {
     pub fn new() -> Result<Self, String> {
         unsafe {
-            CoInitializeEx(None, COINIT_MULTITHREADED)
+            // The compatibility worker also owns OLE clipboard state. OleInitialize
+            // selects a single-threaded apartment, so UI Automation must join the same
+            // apartment instead of trying to switch the worker to MTA.
+            CoInitializeEx(None, COINIT_APARTMENTTHREADED)
                 .ok()
                 .map_err(|error| format!("CoInitializeEx failed: {error}"))?;
         }
@@ -274,5 +277,17 @@ impl Drop for AutomationText {
                 CoUninitialize();
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use inputkey_windows_clipboard::ClipboardPaste;
+
+    #[test]
+    fn automation_joins_the_worker_ole_apartment() {
+        let _clipboard = ClipboardPaste::new().expect("OLE clipboard apartment");
+        let _automation = AutomationText::new().expect("UI Automation on the same STA worker");
     }
 }

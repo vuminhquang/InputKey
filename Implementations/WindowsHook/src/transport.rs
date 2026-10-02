@@ -146,7 +146,7 @@ pub fn thread_has_tsf(target: HWND) -> bool {
 }
 
 /// Cheap hook-thread test. Rich capability probing stays on the worker thread.
-pub fn may_support_text(target: HWND, automation_ready: bool) -> bool {
+pub fn may_support_text(target: HWND, _automation_ready: bool) -> bool {
     if target.is_null() || unsafe { IsWindow(target) } == 0 || thread_has_tsf(target) {
         return false;
     }
@@ -154,9 +154,7 @@ pub fn may_support_text(target: HWND, automation_ready: bool) -> bool {
         return true;
     }
     let class = class_name(target);
-    native::is_edit_class(&class)
-        || is_chromium_surface(target)
-        || (automation_ready && is_automation_surface(target))
+    native::is_edit_class(&class) || is_chromium_surface(target) || is_automation_surface(target)
 }
 
 /// Worker-thread capability resolver. It chooses by supported text capability,
@@ -195,7 +193,7 @@ pub fn capture(target: HWND, automation: Option<&uia::AutomationText>) -> Captur
         }
     }
 
-    if is_chromium_surface(target) {
+    if is_chromium_surface(target) || is_automation_surface(target) {
         return synthetic::OwnedSynthetic::capture(target)
             .map(|target| {
                 Capture::Ready(OwnedTransport::Synthetic {
