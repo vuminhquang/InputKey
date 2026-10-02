@@ -37,8 +37,10 @@ InputKey uses one language-independent root composition machine across browser a
 - English collision recovery
 - Backspace, Escape, finalize, reset, and replay
 - one logical input event per FSM transition
+- root-owned explicit phases: Idle, Composing, CorrectionBoundary, RawBoundary, NaturalBoundary, MouseBoundary, and FinalizeBoundary
 - root-owned Space correction phase with optional language-specific correction rules
-- natural composition boundaries with a one-shot raw-key boundary; punctuation/finalize do not invoke Space correction
+- separate keyboard-natural and mouse/caret boundary states that share only a private displayed-text commit policy
+- one-shot raw-key boundary; punctuation/finalize do not invoke Space correction
 
 ## Platform targets
 

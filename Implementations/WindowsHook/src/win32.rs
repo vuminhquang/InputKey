@@ -131,6 +131,15 @@ fn printable_char(vk: u32, mods: u8) -> Option<char> {
     }
 }
 
+fn natural_boundary_key(vk: u32) -> bool {
+    [
+        VK_RETURN, VK_TAB, VK_LEFT, VK_RIGHT, VK_UP, VK_DOWN, VK_HOME, VK_END, VK_PRIOR, VK_NEXT,
+        VK_DELETE, VK_INSERT,
+    ]
+    .iter()
+    .any(|key| vk == u32::from(*key))
+}
+
 fn mark_suppressed_up(shared: &Shared, vk: u32) {
     if vk < 256 {
         shared.suppress_up[(vk / 64) as usize].fetch_or(1u64 << (vk % 64), Ordering::AcqRel);
@@ -186,6 +195,39 @@ fn push(shared: &Shared, kind: EventKind, vk: u32, mods: u8, target: HWND) -> bo
         }
         true
     }
+}
+
+unsafe extern "system" fn mouse_proc(code: i32, wp: WPARAM, lp: LPARAM) -> LRESULT {
+    if code < 0 {
+        return unsafe { CallNextHookEx(std::ptr::null_mut(), code, wp, lp) };
+    }
+    let Some(shared) = state() else {
+        return unsafe { CallNextHookEx(std::ptr::null_mut(), code, wp, lp) };
+    };
+    let message = wp as u32;
+    if !matches!(
+        message,
+        WM_LBUTTONDOWN | WM_RBUTTONDOWN | WM_MBUTTONDOWN | WM_XBUTTONDOWN
+    ) {
+        return unsafe { CallNextHookEx(std::ptr::null_mut(), code, wp, lp) };
+    }
+    let data = unsafe { &*(lp as *const MSLLHOOKSTRUCT) };
+    if data.flags & LLMHF_INJECTED != 0 {
+        return unsafe { CallNextHookEx(std::ptr::null_mut(), code, wp, lp) };
+    }
+    if !shared.capture_enabled.load(Ordering::Acquire)
+        || !shared.enabled.load(Ordering::Acquire)
+        || !shared.active.load(Ordering::Acquire)
+    {
+        return unsafe { CallNextHookEx(std::ptr::null_mut(), code, wp, lp) };
+    }
+
+    let target = crate::transport::canonical_target(focused_target());
+    if push(shared, EventKind::MouseBoundary, 0, 0, target) {
+        shared.active.store(false, Ordering::Release);
+        shared.active_target.store(0, Ordering::Release);
+    }
+    unsafe { CallNextHookEx(std::ptr::null_mut(), code, wp, lp) }
 }
 
 unsafe extern "system" fn keyboard_proc(code: i32, wp: WPARAM, lp: LPARAM) -> LRESULT {
@@ -280,6 +322,11 @@ unsafe extern "system" fn keyboard_proc(code: i32, wp: WPARAM, lp: LPARAM) -> LR
         if push(shared, EventKind::FinalizeWithDelimiter, vk, mods, target) {
             mark_suppressed_up(shared, vk);
             return 1;
+        }
+    } else if natural_boundary_key(vk) {
+        if push(shared, EventKind::NaturalBoundary, vk, mods, target) {
+            shared.active.store(false, Ordering::Release);
+            shared.active_target.store(0, Ordering::Release);
         }
     } else {
         shared.epoch.fetch_add(1, Ordering::AcqRel);
@@ -460,12 +507,8 @@ fn worker(shared: Arc<Shared>, factory: EngineFactory) {
                     shared.active.store(false, Ordering::Release);
                     shared.active_target.store(0, Ordering::Release);
                 }
-                EventKind::FinalizeOnly => {
-                    let text =
-                        transition::apply(engine.as_mut(), event.kind, None).unwrap_or_default();
-                    if let Some(range) = owned.as_mut() {
-                        let _ = range.replace(automation.as_ref(), clipboard.as_ref(), &text);
-                    }
+                EventKind::NaturalBoundary | EventKind::MouseBoundary => {
+                    let _ = transition::apply(engine.as_mut(), event.kind, None);
                     owned = None;
                     shared.active.store(false, Ordering::Release);
                     shared.active_target.store(0, Ordering::Release);
@@ -605,9 +648,18 @@ pub fn start(config: Config, factory: EngineFactory) -> Result<CompatibilityHand
             PeekMessageW(&mut bootstrap, std::ptr::null_mut(), 0, 0, PM_NOREMOVE);
         }
         let module = unsafe { GetModuleHandleW(std::ptr::null()) };
-        let hook = unsafe { SetWindowsHookExW(WH_KEYBOARD_LL, Some(keyboard_proc), module, 0) };
-        if hook.is_null() {
+        let keyboard_hook =
+            unsafe { SetWindowsHookExW(WH_KEYBOARD_LL, Some(keyboard_proc), module, 0) };
+        if keyboard_hook.is_null() {
             unsafe {
+                SetEvent(ready_handle as HANDLE);
+            }
+            return;
+        }
+        let mouse_hook = unsafe { SetWindowsHookExW(WH_MOUSE_LL, Some(mouse_proc), module, 0) };
+        if mouse_hook.is_null() {
+            unsafe {
+                UnhookWindowsHookEx(keyboard_hook);
                 SetEvent(ready_handle as HANDLE);
             }
             return;
@@ -625,7 +677,8 @@ pub fn start(config: Config, factory: EngineFactory) -> Result<CompatibilityHand
             }
         }
         unsafe {
-            UnhookWindowsHookEx(hook);
+            UnhookWindowsHookEx(mouse_hook);
+            UnhookWindowsHookEx(keyboard_hook);
         }
     });
 

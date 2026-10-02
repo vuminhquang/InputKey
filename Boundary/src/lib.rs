@@ -1,6 +1,6 @@
 //! Boundary protocol declarations and DTOs. No executable behavior lives here.
 
-pub const PROTOCOL_VERSION: u32 = 7;
+pub const PROTOCOL_VERSION: u32 = 8;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum InputType {
@@ -10,7 +10,8 @@ pub enum InputType {
     Finalize,
     DecisionBoundary,
     CommitBoundary,
-    CommitDisplayed,
+    NaturalBoundary,
+    MouseBoundary,
     CommitRawBoundary,
     Reset,
 }

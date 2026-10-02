@@ -82,7 +82,7 @@ static void commit_text_owned(InputKeyEngine *self, char *s) {
 static void commit_core(InputKeyEngine *self, gboolean keep_displayed) {
     if (!self->core || !inputkey_has_history(self->core)) return;
     char *s = keep_displayed
-        ? take_core(inputkey_commit_displayed, self->core)
+        ? take_core(inputkey_natural_boundary, self->core)
         : take_core(inputkey_finalize, self->core);
     if (!keep_displayed) inputkey_reset(self->core);
     commit_text_owned(self, s);

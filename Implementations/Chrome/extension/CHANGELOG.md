@@ -13,7 +13,8 @@
 - Moved correction timing into the language-independent root FSM: only the Space decision boundary offers the active language one correction pass. Vietnamese live typing stays sequential (`mor → mỏ`, `more → mỏe`), invalid speculative text rolls back on the next printable event, explicit repeat-cancel remains immediate (`exx → ex`), and only modifier intent may float at Space (`thuongwf → thường`) while base-letter order stays fixed (`mac`, `macos`, `mod`).
 - Split native language-pack finalization from boundary correction in language-pack ABI v2 so every language can independently define or omit its own correction policy.
 - Fixed Windows language switching after updates by rebinding the per-user TSF COM class to the packaged `InputKeyTSF.dll` before activation. Packaged rebuilds rotate any still-loaded previous runtime instead of leaving COM pointed at old `target` or legacy dist paths.
-- Fixed Enter/Tab/navigation requiring a second key press after an active TSF composition. Natural pass-through boundaries now commit from the non-filtering TSF key-trace observer, so the same physical key continues to the application once.
+- Fixed Enter/Tab/navigation requiring a second key press after an active TSF composition. Natural keyboard boundaries now enter the root `NaturalBoundary` state from the non-filtering TSF key-trace observer, so the same physical key continues to the application once.
+- Added a distinct root `MouseBoundary` state for pointer/caret relocation. Windows TSF tracks mouse activity across the active text context and commits displayed composition before the caret moves; the Windows compatibility hook, Chrome/Edge, and macOS adapters route their real mouse events through the same root boundary contract. The old direct `commit_displayed` API was removed.
 - Updated Chrome/Edge WASM to use the same language catalog and root composition contract.
 
 # 5.0.0

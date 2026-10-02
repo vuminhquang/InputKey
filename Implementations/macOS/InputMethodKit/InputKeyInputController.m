@@ -179,7 +179,7 @@ static BOOL InputKeyAcceptsKey(uint64_t handle, NSString *key) {
     if (![self hasActiveToken]) return;
     NSString *text = finalize
         ? InputKeyStringFromCommand(_core, inputkey_finalize)
-        : InputKeyStringFromCommand(_core, inputkey_commit_displayed);
+        : InputKeyStringFromCommand(_core, inputkey_natural_boundary);
     [self commitText:text client:sender];
     if (finalize) inputkey_reset(_core);
 }
@@ -192,6 +192,21 @@ static BOOL InputKeyAcceptsKey(uint64_t handle, NSString *key) {
         default:
             return NO;
     }
+}
+
+- (BOOL)mouseDownOnCharacterIndex:(NSUInteger)index
+                          coordinate:(NSPoint)point
+                        withModifier:(NSUInteger)flags
+                    continueTracking:(BOOL *)keepTracking
+                              client:(id)sender {
+    (void)index;
+    (void)point;
+    (void)flags;
+    if (keepTracking != NULL) *keepTracking = NO;
+    if (![self hasActiveToken]) return NO;
+    NSString *text = InputKeyStringFromCommand(_core, inputkey_mouse_boundary);
+    [self commitText:text client:sender];
+    return NO;
 }
 
 - (BOOL)handleEvent:(NSEvent *)event client:(id)sender {

@@ -31,6 +31,7 @@ globalThis.Node = { ELEMENT_NODE: 1, TEXT_NODE: 3 };
 globalThis.NodeFilter = { SHOW_TEXT: 4 };
 globalThis.document = {
   documentElement: null,
+  activeElement: null,
   addEventListener(type, fn) { handlers.set(type, fn); }
 };
 globalThis.chrome = {
@@ -56,6 +57,7 @@ before(async () => {
 });
 
 function send(input, key, extras = {}) {
+  document.activeElement = input;
   const event = {
     target: input,
     key,
@@ -119,6 +121,20 @@ test('natural navigation boundary leaves the currently rendered text alone', () 
   assert.equal(input.value, 'đ');
 });
 
+test('mouse boundary ends the active Root composition before caret relocation', () => {
+  const input = new Input();
+  document.activeElement = input;
+  type(input, 'dd');
+  const committed = input.value;
+
+  handlers.get('mousedown')({ target: input, composedPath() { return [input]; } });
+  input.selectionStart = 0;
+  input.selectionEnd = 0;
+  type(input, 'a');
+
+  assert.equal(input.value, 'a' + committed);
+});
+
 test('selecting existing text and typing replaces the selection', () => {
   const input = new Input();
   type(input, 'rooif');
@@ -155,6 +171,8 @@ test('Rust WASM is self-contained and exposes the language-neutral ABI', async (
   const names = new Set(WebAssembly.Module.exports(module).map(item => item.name));
   for (const name of [
     'inputkey_commit_raw_boundary',
+    'inputkey_natural_boundary',
+    'inputkey_mouse_boundary',
     'inputkey_decision_boundary_utf8',
     'inputkey_accepts_key_utf8',
     'inputkey_create_ex',

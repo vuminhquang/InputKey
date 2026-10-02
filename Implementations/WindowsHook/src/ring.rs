@@ -69,6 +69,7 @@ pub enum EventKind {
     Escape,
     RawBoundary,
     FinalizeWithDelimiter,
-    FinalizeOnly,
+    NaturalBoundary,
+    MouseBoundary,
     ResetOnly,
 }

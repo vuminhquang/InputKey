@@ -474,7 +474,7 @@ private:
         if (!inputkey_has_history(handle)) return;
         auto value = keepDisplayed
             ? take([&](uint8_t *p, size_t n) {
-                  return inputkey_commit_displayed(handle, p, n);
+                  return inputkey_natural_boundary(handle, p, n);
               })
             : take([&](uint8_t *p, size_t n) {
                   return inputkey_finalize(handle, p, n);

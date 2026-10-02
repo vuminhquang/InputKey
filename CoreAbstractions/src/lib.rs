@@ -139,6 +139,11 @@ pub trait LanguageCatalogPort: Send + Sync {
 pub enum RootPhase {
     Idle,
     Composing,
+    CorrectionBoundary,
+    RawBoundary,
+    NaturalBoundary,
+    MouseBoundary,
+    FinalizeBoundary,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -188,7 +193,8 @@ pub trait TypingEnginePort: Send {
     fn finalize(&mut self) -> String;
     fn decision_boundary(&mut self, delimiter: char) -> String;
     fn commit_boundary(&mut self) -> String;
-    fn commit_displayed(&mut self) -> String;
+    fn natural_boundary(&mut self) -> String;
+    fn mouse_boundary(&mut self) -> String;
     fn commit_raw_boundary(&mut self) -> String;
     fn reset(&mut self);
     fn rendered(&self) -> String;

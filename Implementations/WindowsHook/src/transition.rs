@@ -14,7 +14,8 @@ pub fn apply(
         EventKind::FinalizeWithDelimiter => {
             key.map(|delimiter| engine.decision_boundary(delimiter))
         }
-        EventKind::FinalizeOnly => Some(engine.commit_boundary()),
+        EventKind::NaturalBoundary => Some(engine.natural_boundary()),
+        EventKind::MouseBoundary => Some(engine.mouse_boundary()),
         EventKind::ResetOnly => {
             engine.reset();
             None
@@ -58,7 +59,10 @@ mod tests {
         fn commit_boundary(&mut self) -> String {
             std::mem::take(&mut self.value)
         }
-        fn commit_displayed(&mut self) -> String {
+        fn natural_boundary(&mut self) -> String {
+            std::mem::take(&mut self.value)
+        }
+        fn mouse_boundary(&mut self) -> String {
             std::mem::take(&mut self.value)
         }
         fn commit_raw_boundary(&mut self) -> String {
@@ -86,7 +90,7 @@ mod tests {
         apply(&mut engine, EventKind::TypeChar, Some('g'));
         apply(&mut engine, EventKind::TypeChar, Some('o'));
         assert_eq!(
-            apply(&mut engine, EventKind::FinalizeOnly, None),
+            apply(&mut engine, EventKind::NaturalBoundary, None),
             Some("go".into())
         );
         assert!(!engine.history_active());

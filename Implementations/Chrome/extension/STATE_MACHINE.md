@@ -49,8 +49,12 @@ Backspace restores the state before the cancel. A further repeated key is litera
 
 ## Ending a composition
 
-Space invokes the root correction boundary once, then finalizes and inserts a normal space. Punctuation finalizes without invoking correction. Enter, Tab, navigation keys, and Delete commit the currently displayed text and then continue to the application. For example, `dd` displays `đ`; Right commits `đ` and then moves the caret.
+The root owns explicit lifecycle phases: `Idle`, `Composing`, `CorrectionBoundary`, `RawBoundary`, `NaturalBoundary`, `MouseBoundary`, and `FinalizeBoundary`. A boundary event first moves the root into its boundary state; that state then performs its commit policy and returns the root to `Idle`.
 
-Shift+Space instead commits only the token's physical keystream and ends composition; the Space keystroke is consumed. For example, `refer` may display `rể`, while Shift+Space commits `refer`. Escape restores the literal token in-place and continued typing stays literal until the next boundary.
+Space enters `CorrectionBoundary` once, lets the active language perform its optional correction, then finalizes and inserts a normal space. Punctuation uses `FinalizeBoundary` without correction. Enter, Tab, navigation keys, Delete, and Insert enter `NaturalBoundary`, commit the currently displayed text, return to `Idle`, and let the same physical key continue to the application.
+
+A pointer/caret relocation enters the separate `MouseBoundary` state before the default pointer action changes the caret or selection. `MouseBoundary` and `NaturalBoundary` are different semantic states, but both call the root's private displayed-text commit-and-reset primitive. For example, if `dd` displays `đ`, clicking elsewhere first leaves `đ` committed at the old caret and only then relocates the caret.
+
+Shift+Space enters `RawBoundary`, commits only the token's physical keystream, returns to `Idle`, and consumes the Space keystroke. For example, `refer` may display `rể`, while Shift+Space commits `refer`. Escape restores the literal token in-place and continued typing stays literal until the next boundary.
 
 Only one input method should own a field at a time. When the browser extension owns composition in a remote or WSLg browser, disable any second IME for that same field to avoid double conversion.

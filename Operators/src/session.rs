@@ -14,6 +14,11 @@ fn project(machine: &Machine, commit: &str) -> OutputDto {
         mode: match state.phase {
             RootPhase::Idle => "idle",
             RootPhase::Composing => "composing",
+            RootPhase::CorrectionBoundary => "correction_boundary",
+            RootPhase::RawBoundary => "raw_boundary",
+            RootPhase::NaturalBoundary => "natural_boundary",
+            RootPhase::MouseBoundary => "mouse_boundary",
+            RootPhase::FinalizeBoundary => "finalize_boundary",
         }
         .to_owned(),
         phase: state.child_phase,
@@ -95,8 +100,11 @@ impl Session {
             InputType::CommitBoundary => {
                 commit = self.machine.commit_boundary();
             }
-            InputType::CommitDisplayed => {
-                commit = self.machine.commit_displayed();
+            InputType::NaturalBoundary => {
+                commit = self.machine.natural_boundary();
+            }
+            InputType::MouseBoundary => {
+                commit = self.machine.mouse_boundary();
             }
             InputType::CommitRawBoundary => {
                 commit = self.machine.commit_raw_boundary();

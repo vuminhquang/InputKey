@@ -19,7 +19,8 @@ lib.inputkey_catalog_json.restype = ctypes.c_size_t
 
 for name in (
     "inputkey_backspace", "inputkey_escape", "inputkey_finalize",
-    "inputkey_commit_raw_boundary", "inputkey_rendered", "inputkey_raw",
+    "inputkey_commit_raw_boundary", "inputkey_natural_boundary", "inputkey_mouse_boundary",
+    "inputkey_rendered", "inputkey_raw",
 ):
     fn = getattr(lib, name)
     fn.argtypes = [ctypes.c_uint64, ctypes.POINTER(ctypes.c_uint8), ctypes.c_size_t]
@@ -59,6 +60,22 @@ finally:
 h = lib.inputkey_create(b"telex", 0, 1)
 try:
     assert type_text(h, "urrl") == "url"
+finally:
+    lib.inputkey_destroy(h)
+
+h = lib.inputkey_create(b"telex", 0, 1)
+try:
+    assert type_text(h, "dd") == "đ"
+    assert call_text(lib.inputkey_natural_boundary, h) == "đ"
+    assert type_text(h, "a") == "a"
+finally:
+    lib.inputkey_destroy(h)
+
+h = lib.inputkey_create(b"telex", 0, 1)
+try:
+    assert type_text(h, "dd") == "đ"
+    assert call_text(lib.inputkey_mouse_boundary, h) == "đ"
+    assert type_text(h, "a") == "a"
 finally:
     lib.inputkey_destroy(h)
 

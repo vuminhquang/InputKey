@@ -23,17 +23,18 @@ use windows::{
             Input::KeyboardAndMouse::{
                 GetKeyState, GetKeyboardLayout, GetKeyboardState, MapVirtualKeyExW, ToUnicodeEx,
                 MAPVK_VK_TO_VSC, VK_BACK, VK_CONTROL, VK_DELETE, VK_DOWN, VK_END, VK_ESCAPE,
-                VK_HOME, VK_LEFT, VK_LWIN, VK_MENU, VK_NEXT, VK_PRIOR, VK_RETURN, VK_RIGHT,
-                VK_RWIN, VK_SHIFT, VK_SPACE, VK_TAB, VK_UP,
+                VK_HOME, VK_INSERT, VK_LEFT, VK_LWIN, VK_MENU, VK_NEXT, VK_PRIOR, VK_RETURN,
+                VK_RIGHT, VK_RWIN, VK_SHIFT, VK_SPACE, VK_TAB, VK_UP,
             },
             TextServices::{
                 ITfComposition, ITfCompositionSink, ITfCompositionSink_Impl, ITfContext,
                 ITfContextComposition, ITfEditSession, ITfEditSession_Impl, ITfInsertAtSelection,
                 ITfKeyEventSink, ITfKeyEventSink_Impl, ITfKeyTraceEventSink,
-                ITfKeyTraceEventSink_Impl, ITfKeystrokeMgr, ITfSource, ITfTextInputProcessor,
-                ITfTextInputProcessor_Impl, ITfThreadMgr, TF_AE_END, TF_ANCHOR_END,
-                TF_ANCHOR_START, TF_DEFAULT_SELECTION, TF_ES_READWRITE, TF_ES_SYNC,
-                TF_IAS_NO_DEFAULT_COMPOSITION, TF_SELECTION, TF_SELECTIONSTYLE,
+                ITfKeyTraceEventSink_Impl, ITfKeystrokeMgr, ITfMouseSink, ITfMouseSink_Impl,
+                ITfMouseTracker, ITfSource, ITfTextInputProcessor, ITfTextInputProcessor_Impl,
+                ITfThreadMgr, TF_AE_END, TF_ANCHOR_END, TF_ANCHOR_START, TF_DEFAULT_SELECTION,
+                TF_ES_READWRITE, TF_ES_SYNC, TF_IAS_NO_DEFAULT_COMPOSITION, TF_SELECTION,
+                TF_SELECTIONSTYLE,
             },
             WindowsAndMessaging::{
                 CreateWindowExW, DefWindowProcW, DestroyWindow, FindWindowW, PostMessageW,
@@ -58,7 +59,7 @@ fn pointer_error() -> Error {
 fn commit_then_pass_key(vk: u32) -> bool {
     [
         VK_RETURN, VK_TAB, VK_LEFT, VK_RIGHT, VK_UP, VK_DOWN, VK_HOME, VK_END, VK_PRIOR, VK_NEXT,
-        VK_DELETE,
+        VK_DELETE, VK_INSERT,
     ]
     .iter()
     .any(|key| vk == key.0 as u32)
@@ -91,6 +92,13 @@ enum EditAction {
     Update(String),
     Commit(String),
     ValidateCaret(Arc<std::sync::atomic::AtomicBool>),
+    TrackMouse(ITfMouseSink),
+}
+
+struct MouseTracking {
+    context: ITfContext,
+    tracker: ITfMouseTracker,
+    cookie: u32,
 }
 
 struct Runtime {
@@ -126,6 +134,7 @@ struct ControlState {
     enabled: AtomicBool,
     client_id: AtomicU32,
     control_hwnd: AtomicIsize,
+    mouse_tracking: Mutex<Option<MouseTracking>>,
 }
 
 impl ControlState {
@@ -149,10 +158,25 @@ impl ControlState {
             enabled: AtomicBool::new(persisted.enabled),
             client_id: AtomicU32::new(0),
             control_hwnd: AtomicIsize::new(0),
+            mouse_tracking: Mutex::new(None),
+        }
+    }
+
+    fn clear_mouse_tracking(&self) {
+        if let Some(tracking) = self
+            .mouse_tracking
+            .lock()
+            .expect("mouse tracking lock")
+            .take()
+        {
+            unsafe {
+                let _ = tracking.tracker.UnadviseMouseSink(tracking.cookie);
+            }
         }
     }
 
     fn reset_runtime(&self) {
+        self.clear_mouse_tracking();
         let config = self.config.lock().expect("config lock").clone();
         let mut runtime = self.runtime.lock().expect("runtime lock");
         runtime.engine = (self.factory)(config);
@@ -370,6 +394,41 @@ impl EditSession {
         Ok((composition, range))
     }
 
+    fn install_mouse_tracking(&self, ec: u32, sink: &ITfMouseSink) -> Result<()> {
+        let current_context = self.context.clone();
+        {
+            let guard = self
+                .control
+                .mouse_tracking
+                .lock()
+                .expect("mouse tracking lock");
+            if guard.as_ref().is_some_and(|tracking| {
+                Interface::as_raw(&tracking.context) == Interface::as_raw(&current_context)
+            }) {
+                return Ok(());
+            }
+        }
+
+        self.control.clear_mouse_tracking();
+        let range = unsafe { self.context.GetStart(ec)? };
+        let end = unsafe { self.context.GetEnd(ec)? };
+        unsafe {
+            range.ShiftEndToRange(ec, &end, TF_ANCHOR_END)?;
+        }
+        let tracker: ITfMouseTracker = self.context.cast()?;
+        let cookie = unsafe { tracker.AdviseMouseSink(&range, sink)? };
+        *self
+            .control
+            .mouse_tracking
+            .lock()
+            .expect("mouse tracking lock") = Some(MouseTracking {
+            context: current_context,
+            tracker,
+            cookie,
+        });
+        Ok(())
+    }
+
     fn caret_is_at_composition_end(&self, ec: u32) -> Result<bool> {
         let composition = match self
             .control
@@ -463,6 +522,7 @@ impl ITfEditSession_Impl for EditSession_Impl {
                 }
                 Ok(())
             }
+            EditAction::TrackMouse(sink) => self.install_mouse_tracking(ec, sink),
         }
     }
 }
@@ -487,7 +547,12 @@ fn request_edit(
     result.ok()
 }
 
-#[implement(ITfTextInputProcessor, ITfKeyEventSink, ITfKeyTraceEventSink)]
+#[implement(
+    ITfTextInputProcessor,
+    ITfKeyEventSink,
+    ITfKeyTraceEventSink,
+    ITfMouseSink
+)]
 pub struct TextService {
     control: Rc<ControlState>,
     thread_mgr: Mutex<Option<ITfThreadMgr>>,
@@ -525,7 +590,7 @@ impl TextService {
             if !runtime.active() {
                 return;
             }
-            runtime.engine.commit_displayed()
+            runtime.engine.natural_boundary()
         };
 
         let Ok(context) = self.focused_context() else {
@@ -603,6 +668,30 @@ impl TextService {
             EditAction::ValidateCaret(Arc::clone(&moved)),
         )?;
         Ok(moved.load(Ordering::Acquire))
+    }
+
+    fn ensure_mouse_tracking(&self, context: &ITfContext, sink: &ITfMouseSink) -> Result<()> {
+        if !self.control.runtime.lock().expect("runtime lock").active() {
+            return Ok(());
+        }
+        request_edit(&self.control, context, EditAction::TrackMouse(sink.clone()))
+    }
+
+    fn commit_mouse_boundary(&self) {
+        let text = {
+            let mut runtime = self.control.runtime.lock().expect("runtime lock");
+            if !runtime.active() {
+                return;
+            }
+            runtime.engine.mouse_boundary()
+        };
+        let Ok(context) = self.focused_context() else {
+            self.fail_open();
+            return;
+        };
+        if request_edit(&self.control, &context, EditAction::Commit(text)).is_err() {
+            self.fail_open();
+        }
     }
 
     fn should_offer_key(&self, vk: u32) -> bool {
@@ -734,6 +823,7 @@ impl TextService {
 
 impl Drop for TextService {
     fn drop(&mut self) {
+        self.control.clear_mouse_tracking();
         destroy_control_window(&self.control);
         LIVE_OBJECTS.fetch_sub(1, Ordering::AcqRel);
     }
@@ -818,7 +908,16 @@ impl ITfKeyEventSink_Impl for TextService_Impl {
     }
 
     fn OnKeyDown(&self, pic: Ref<ITfContext>, wparam: WPARAM, _lparam: LPARAM) -> Result<BOOL> {
-        self.handle_key_down(pic.ok()?, wparam.0 as u32)
+        let context = pic.ok()?;
+        let eaten = self.handle_key_down(context, wparam.0 as u32)?;
+        if eaten.as_bool() {
+            let sink: ITfMouseSink = self.to_interface();
+            if self.ensure_mouse_tracking(context, &sink).is_err() {
+                self.fail_open();
+                return Ok(BOOL::from(false));
+            }
+        }
+        Ok(eaten)
     }
 
     fn OnKeyUp(&self, _pic: Ref<ITfContext>, wparam: WPARAM, _lparam: LPARAM) -> Result<BOOL> {
@@ -833,6 +932,16 @@ impl ITfKeyEventSink_Impl for TextService_Impl {
     }
 
     fn OnPreservedKey(&self, _pic: Ref<ITfContext>, _rguid: *const GUID) -> Result<BOOL> {
+        Ok(BOOL::from(false))
+    }
+}
+
+impl ITfMouseSink_Impl for TextService_Impl {
+    fn OnMouseEvent(&self, _uedge: u32, _uquadrant: u32, dwbtnstatus: u32) -> Result<BOOL> {
+        const BUTTON_MASK: u32 = 0x0073;
+        if dwbtnstatus & BUTTON_MASK != 0 {
+            self.commit_mouse_boundary();
+        }
         Ok(BOOL::from(false))
     }
 }

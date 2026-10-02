@@ -1,7 +1,9 @@
 use std::sync::{Arc, Mutex};
 
 use inputkey_boundary::{InputEvent, InputType};
-use inputkey_core_abstractions::{CoreEvent, CoreEventType, EventPublisher, LexiconPort};
+use inputkey_core_abstractions::{
+    CoreEvent, CoreEventType, EventPublisher, LexiconPort, RootPhase,
+};
 use inputkey_language_vietnamese::{Machine, Mode, Options, Phase};
 use inputkey_operators::{replay, Machine as RootMachine, Session};
 
@@ -441,25 +443,21 @@ fn word_boundary_adjusts_but_natural_ime_boundary_preserves_visible_text() {
     assert_eq!(word_boundary.state().mode, Mode::Start);
     assert!(!word_boundary.has_history());
 
-    let mut natural_boundary = Machine::new(options("telex", false, true), Some(Box::new(Words)));
+    let mut natural_boundary = root(options("telex", false, true));
     for key in "data".chars() {
         natural_boundary.type_key(key);
     }
     assert_eq!(natural_boundary.rendered_text(), "dât");
-    assert_eq!(natural_boundary.commit_displayed(), "dât");
-    let state = natural_boundary.state();
-    assert_eq!(state.mode, Mode::Start);
-    assert_eq!(state.phase, Phase::Start);
-    assert_eq!(state.raw, "");
-    assert_eq!(state.rendered, "");
+    assert_eq!(natural_boundary.natural_boundary(), "dât");
+    assert_eq!(natural_boundary.state().phase, RootPhase::Idle);
     assert!(!natural_boundary.has_history());
 
-    let mut stroked_d = Machine::new(options("telex", false, true), Some(Box::new(Words)));
+    let mut stroked_d = root(options("telex", false, true));
     stroked_d.type_key('d');
     stroked_d.type_key('d');
     assert_eq!(stroked_d.rendered_text(), "đ");
-    assert_eq!(stroked_d.commit_displayed(), "đ");
-    assert_eq!(stroked_d.state().mode, Mode::Start);
+    assert_eq!(stroked_d.natural_boundary(), "đ");
+    assert_eq!(stroked_d.state().phase, RootPhase::Idle);
 }
 
 #[test]

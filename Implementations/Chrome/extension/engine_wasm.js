@@ -141,9 +141,15 @@
       return keyCall('inputkey_decision_boundary_utf8', this._id, delimiter);
     }
 
-    commitDisplayed() {
+    naturalBoundary() {
       this._ensure();
-      wasm.inputkey_commit_displayed(this._id);
+      wasm.inputkey_natural_boundary(this._id);
+      return output();
+    }
+
+    mouseBoundary() {
+      this._ensure();
+      wasm.inputkey_mouse_boundary(this._id);
       return output();
     }
 

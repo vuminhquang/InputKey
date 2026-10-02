@@ -235,7 +235,7 @@
 
     if (e.ctrlKey || e.metaKey || e.altKey) {
       if (!['Shift', 'Control'].includes(e.key) && s.engine.raw) {
-        s.engine.commitDisplayed();
+        s.engine.naturalBoundary();
         s.lastRendered = '';
       }
       return;
@@ -261,7 +261,7 @@
     }
 
     if (['ArrowLeft','ArrowRight','ArrowUp','ArrowDown','Home','End','PageUp','PageDown','Delete','Insert','Tab','Enter'].includes(e.key)) {
-      if (s.engine.raw) s.engine.commitDisplayed();
+      if (s.engine.raw) s.engine.naturalBoundary();
       s.lastRendered = '';
       return;
     }
@@ -298,8 +298,13 @@
   }, true);
 
   document.addEventListener('mousedown', e => {
-    const el = findEditable(actualTarget(e));
-    if (el) resetState(el);
+    const previous = findEditable(document.activeElement);
+    const current = findEditable(actualTarget(e));
+    const el = previous || current;
+    if (!el) return;
+    const s = states.get(el);
+    if (s?.engine.raw) s.engine.mouseBoundary();
+    if (s) s.lastRendered = '';
   }, true);
 
   document.addEventListener('paste', e => {

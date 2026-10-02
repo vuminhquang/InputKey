@@ -168,7 +168,7 @@ chrome.storage.onChanged.addListener((_, area) => {
     }
 
     if (e.ctrlKey || e.metaKey || e.altKey || e.isComposing) {
-      if (tester.raw) tester.commitDisplayed();
+      if (tester.raw) tester.naturalBoundary();
       testerRendered = '';
       return;
     }
@@ -190,7 +190,7 @@ chrome.storage.onChanged.addListener((_, area) => {
     }
 
     if (['ArrowLeft','ArrowRight','ArrowUp','ArrowDown','Home','End','PageUp','PageDown','Delete','Insert','Tab','Enter'].includes(e.key)) {
-      if (tester.raw) tester.commitDisplayed();
+      if (tester.raw) tester.naturalBoundary();
       testerRendered = '';
       return;
     }
@@ -213,8 +213,8 @@ chrome.storage.onChanged.addListener((_, area) => {
     }
   });
 
-  tryBox.addEventListener('click', () => {
-    tester.reset();
+  tryBox.addEventListener('mousedown', () => {
+    if (tester.raw) tester.mouseBoundary();
     testerRendered = '';
   });
 

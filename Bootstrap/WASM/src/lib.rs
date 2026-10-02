@@ -188,8 +188,13 @@ pub extern "C" fn inputkey_commit_raw_boundary(h: u32) {
 }
 
 #[no_mangle]
-pub extern "C" fn inputkey_commit_displayed(h: u32) {
-    cmd(h, InputType::CommitDisplayed, true)
+pub extern "C" fn inputkey_natural_boundary(h: u32) {
+    cmd(h, InputType::NaturalBoundary, true)
+}
+
+#[no_mangle]
+pub extern "C" fn inputkey_mouse_boundary(h: u32) {
+    cmd(h, InputType::MouseBoundary, true)
 }
 
 #[no_mangle]

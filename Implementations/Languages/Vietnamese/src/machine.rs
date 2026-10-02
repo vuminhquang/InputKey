@@ -81,7 +81,6 @@ enum FsmEvent {
     Backspace,
     Escape,
     CommitBoundary,
-    CommitDisplayed,
     CommitRawBoundary,
     Reset,
 }
@@ -1980,13 +1979,6 @@ impl Machine {
         committed
     }
 
-    fn apply_commit_displayed(&mut self) -> String {
-        let committed = self.rendered.clone();
-        self.history.clear();
-        self.clear();
-        committed
-    }
-
     fn apply_commit_raw_boundary(&mut self) -> String {
         let committed = self.raw.clone();
         self.history.clear();
@@ -2026,7 +2018,6 @@ impl Machine {
             FsmEvent::Backspace => self.apply_backspace(),
             FsmEvent::Escape => self.apply_escape(),
             FsmEvent::CommitBoundary => self.apply_commit_boundary(),
-            FsmEvent::CommitDisplayed => self.apply_commit_displayed(),
             FsmEvent::CommitRawBoundary => self.apply_commit_raw_boundary(),
             FsmEvent::Reset => {
                 self.apply_reset();
@@ -2057,10 +2048,6 @@ impl Machine {
 
     pub fn commit_boundary(&mut self) -> String {
         self.transition(FsmEvent::CommitBoundary)
-    }
-
-    pub fn commit_displayed(&mut self) -> String {
-        self.transition(FsmEvent::CommitDisplayed)
     }
 
     pub fn commit_raw_boundary(&mut self) -> String {

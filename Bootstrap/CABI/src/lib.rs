@@ -242,8 +242,13 @@ pub extern "C" fn inputkey_commit_raw_boundary(h: u64, o: *mut u8, c: usize) -> 
 }
 
 #[no_mangle]
-pub extern "C" fn inputkey_commit_displayed(h: u64, o: *mut u8, c: usize) -> usize {
-    command(h, InputType::CommitDisplayed, true, o, c)
+pub extern "C" fn inputkey_natural_boundary(h: u64, o: *mut u8, c: usize) -> usize {
+    command(h, InputType::NaturalBoundary, true, o, c)
+}
+
+#[no_mangle]
+pub extern "C" fn inputkey_mouse_boundary(h: u64, o: *mut u8, c: usize) -> usize {
+    command(h, InputType::MouseBoundary, true, o, c)
 }
 
 #[no_mangle]

@@ -18,10 +18,13 @@ InputKey is a Rust-first multilingual input method with one language-independent
 InputKey follows normal IME boundary behavior instead of keeping a separate token mode. While a token is active:
 
 - **Space** enters the root correction boundary: the active language gets one optional correction pass, the token is finalized, and a normal space is inserted. **Punctuation** finalizes without invoking correction, then inserts the delimiter.
-- **Enter, Tab, arrows, Home/End, Page Up/Down, and Delete** commit exactly the text currently displayed, end composition, and let that same key continue to the application.
-- **Shift+Space** is a one-shot raw escape: it commits the physical keystroke sequence for the current token, consumes the Space keystroke, and ends composition.
+- **Enter, Tab, arrows, Home/End, Page Up/Down, Delete, and Insert** enter the root `NaturalBoundary` state, commit exactly the text currently displayed, end composition, and let that same key continue to the application.
+- **Mouse/caret relocation** enters the separate root `MouseBoundary` state, commits the displayed text at the old caret, ends composition, and only then lets the pointer action move the caret or selection.
+- **Shift+Space** enters `RawBoundary`: it commits the physical keystroke sequence for the current token, consumes the Space keystroke, and ends composition.
 
-For example, `dd` displays `đ`; pressing an arrow commits `đ` and then moves the caret. `refer` may display `rể`; pressing Shift+Space commits `refer`.
+For example, `dd` displays `đ`; pressing an arrow commits `đ` and then moves the caret. Clicking elsewhere first commits `đ` at its original caret before the click relocates the selection. `refer` may display `rể`; pressing Shift+Space commits `refer`.
+
+The root owns explicit lifecycle phases: `Idle`, `Composing`, `CorrectionBoundary`, `RawBoundary`, `NaturalBoundary`, `MouseBoundary`, and `FinalizeBoundary`. `NaturalBoundary` and `MouseBoundary` are deliberately distinct states even though both use the same private displayed-text commit policy.
 
 ## Windows input paths
 

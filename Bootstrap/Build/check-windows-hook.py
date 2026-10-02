@@ -18,30 +18,29 @@ synthetic = synthetic_source.read_text(encoding="utf-8")
 clipboard = clipboard_source.read_text(encoding="utf-8")
 transition = transition_source.read_text(encoding="utf-8")
 
-match = re.search(
-    r'(?s)(?:unsafe\s+)?extern\s+"system"\s+fn\s+keyboard_proc\b.*?\{',
-    hook,
-)
-if not match:
-    raise SystemExit("Windows compatibility check failed: keyboard_proc is missing")
+def callback_body(name: str) -> str:
+    match = re.search(
+        rf'(?s)(?:unsafe\s+)?extern\s+"system"\s+fn\s+{re.escape(name)}\b.*?\{{',
+        hook,
+    )
+    if not match:
+        raise SystemExit(f"Windows compatibility check failed: {name} is missing")
+    start = match.start()
+    depth = 0
+    body_end = None
+    for index in range(hook.find("{", start), len(hook)):
+        char = hook[index]
+        if char == "{":
+            depth += 1
+        elif char == "}":
+            depth -= 1
+            if depth == 0:
+                body_end = index + 1
+                break
+    if body_end is None:
+        raise SystemExit(f"Windows compatibility check failed: {name} body is incomplete")
+    return hook[start:body_end]
 
-start = match.start()
-depth = 0
-body_end = None
-for index in range(hook.find("{", start), len(hook)):
-    char = hook[index]
-    if char == "{":
-        depth += 1
-    elif char == "}":
-        depth -= 1
-        if depth == 0:
-            body_end = index + 1
-            break
-
-if body_end is None:
-    raise SystemExit("Windows compatibility check failed: keyboard_proc body is incomplete")
-
-body = hook[start:body_end]
 forbidden_callback = (
     "ClipboardPaste",
     "TypingEnginePort",
@@ -58,12 +57,14 @@ forbidden_callback = (
     "std::fs",
     "sleep(",
 )
-found = [word for word in forbidden_callback if word.lower() in body.lower()]
-if found:
-    raise SystemExit(
-        "Windows compatibility check failed: blocking/mutating callback operations: "
-        + ", ".join(found)
-    )
+for callback in ("keyboard_proc", "mouse_proc"):
+    body = callback_body(callback)
+    found = [word for word in forbidden_callback if word.lower() in body.lower()]
+    if found:
+        raise SystemExit(
+            f"Windows compatibility check failed: {callback} has blocking/mutating operations: "
+            + ", ".join(found)
+        )
 
 for forbidden in (
     "SendInput",
@@ -86,6 +87,9 @@ for required in (
     "may_support_text",
     "capture(target",
     "FinalizeWithDelimiter",
+    "WH_MOUSE_LL",
+    "MouseBoundary",
+    "NaturalBoundary",
 ):
     if required not in hook:
         raise SystemExit(
@@ -193,10 +197,12 @@ for required in (
             + required
         )
 
-if "decision_boundary" not in transition:
-    raise SystemExit(
-        "Windows compatibility check failed: delimiter semantics bypass the root engine"
-    )
+for required in ("decision_boundary", "natural_boundary", "mouse_boundary"):
+    if required not in transition:
+        raise SystemExit(
+            "Windows compatibility check failed: boundary semantics bypass the root engine: "
+            + required
+        )
 
 owned_write = re.search(
     r"(?s)let ok = owned\.as_mut\(\).*?range\.replace\(.*?if !ok \{(.*?)\}\s*else if remains_active",

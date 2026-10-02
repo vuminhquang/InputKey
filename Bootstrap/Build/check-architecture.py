@@ -130,6 +130,26 @@ for role in ("Boundary", "CoreAbstractions", "Operators"):
         if role == "Operators" and re.search(r"\bunsafe\b", text):
             errors.append(f"unsafe code is forbidden in Operators: {rel(source)}")
 
+
+root_source = (ROOT / "Operators" / "src" / "root.rs").read_text(encoding="utf-8")
+core_source = (ROOT / "CoreAbstractions" / "src" / "lib.rs").read_text(encoding="utf-8")
+boundary_source = (ROOT / "Boundary" / "src" / "lib.rs").read_text(encoding="utf-8")
+for required in (
+    "RootPhase::CorrectionBoundary",
+    "RootPhase::RawBoundary",
+    "RootPhase::NaturalBoundary",
+    "RootPhase::MouseBoundary",
+    "commit_displayed_and_reset",
+):
+    if required not in root_source:
+        errors.append(f"root FSM missing explicit boundary-state primitive: {required}")
+for required in ("NaturalBoundary", "MouseBoundary"):
+    if required not in core_source or required not in boundary_source:
+        errors.append(f"boundary protocol missing explicit root state/event: {required}")
+for forbidden in ("fn commit_displayed(&mut self)", "InputType::CommitDisplayed"):
+    if forbidden in root_source or forbidden in core_source or forbidden in boundary_source:
+        errors.append(f"obsolete direct displayed-commit API remains: {forbidden}")
+
 if errors:
     print("CONTRACT IS LAW! ARCHITECTURE VIOLATION DETECTED.")
     for error in errors:
