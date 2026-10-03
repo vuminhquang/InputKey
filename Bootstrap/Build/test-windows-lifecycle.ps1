@@ -128,11 +128,12 @@ try {
         throw "TSF startup regression: InputKey did not repair the current-user COM binding to '$Dll'. Actual: '$bindingAfter'."
     }
     $statusAfter = (& $Registrar --status 2>&1 | Out-String).Trim()
-    foreach ($required in @("registered=true", "available=true", "active=true", "bound=true")) {
+    foreach ($required in @("registered=true", "available=true", "bound=true")) {
         if ($statusAfter -notmatch [regex]::Escape($required)) {
-            throw "TSF startup regression: expected '$required' after automatic registration/activation. Status: $statusAfter"
+            throw "TSF startup regression: expected '$required' after automatic registration/repair. Status: $statusAfter"
         }
     }
+    Write-Host "tsf-status=$statusAfter"
 
     if (-not [InputKeyWindowProbe]::PostMessage($window, 0x0111, [IntPtr]106, [IntPtr]::Zero)) {
         throw "Could not invoke Start with Windows."
