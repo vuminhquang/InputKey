@@ -40,8 +40,8 @@ jobs:
       - name: Build Linux package
         run: sh Bootstrap/Build/build-linux.sh
 
-      - name: Linux shortcut parser
-        run: sh Bootstrap/Build/test-linux-shortcut.sh
+      - name: Linux adapter contract
+        run: python3 Bootstrap/Build/check-linux-adapters.py
 
       - name: Build Chrome and Edge package
         run: sh Bootstrap/Build/build-chrome.sh
