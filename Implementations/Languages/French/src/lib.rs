@@ -8,8 +8,9 @@
 //! cc→ç, oe→œ, ae→æ
 
 use inputkey_core_abstractions::{
-    LanguageConfig, LanguageMachinePort, LanguageMetadata, LanguageMethodMetadata,
-    LanguagePackPort, LanguageState,
+    CompositionControl, LanguageConfig, LanguageMachinePort, LanguageMetadata,
+    LanguageMethodMetadata, LanguagePackPort, LanguageState, LanguageTransitionResult,
+    LifecycleEvent, RootInput, RootTransition,
 };
 
 #[derive(Clone)]
@@ -93,7 +94,7 @@ impl Machine {
         true
     }
 
-    pub fn type_key(&mut self, key: char) -> String {
+    fn apply_character(&mut self, key: char) -> String {
         self.history.push(Snapshot {
             raw: self.raw.clone(),
             rendered: self.rendered.clone(),
@@ -107,7 +108,7 @@ impl Machine {
         self.rendered.clone()
     }
 
-    pub fn backspace(&mut self) -> String {
+    fn apply_backspace(&mut self) -> String {
         if let Some(snapshot) = self.history.pop() {
             self.raw = snapshot.raw;
             self.rendered = snapshot.rendered;
@@ -116,17 +117,13 @@ impl Machine {
         self.rendered.clone()
     }
 
-    pub fn escape(&mut self) -> String {
+    fn apply_escape(&mut self) -> String {
         self.literal = true;
         self.rendered = self.raw.clone();
         self.rendered.clone()
     }
 
-    pub fn finalize(&mut self) -> String {
-        self.rendered.clone()
-    }
-
-    pub fn reset(&mut self) {
+    fn clear(&mut self) {
         self.raw.clear();
         self.rendered.clear();
         self.literal = false;
@@ -141,28 +138,41 @@ impl Default for Machine {
 }
 
 impl LanguageMachinePort for Machine {
-    fn accepts_key(&self, key: char) -> bool {
-        key.is_ascii_alphabetic() || (key == '\'' && !self.raw.is_empty())
+    fn accepts_character(&self, character: char) -> bool {
+        character.is_ascii_alphabetic() || (character == '\'' && !self.raw.is_empty())
     }
 
-    fn type_key(&mut self, key: char) -> String {
-        Machine::type_key(self, key)
-    }
-
-    fn backspace(&mut self) -> String {
-        Machine::backspace(self)
-    }
-
-    fn escape(&mut self) -> String {
-        Machine::escape(self)
-    }
-
-    fn finalize(&mut self) -> String {
-        Machine::finalize(self)
-    }
-
-    fn reset(&mut self) {
-        Machine::reset(self)
+    fn on_transition(&mut self, transition: RootTransition) -> LanguageTransitionResult {
+        let text = match transition.input {
+            RootInput::Character(character) => self.apply_character(character),
+            RootInput::CompositionControl(CompositionControl::Backspace) => self.apply_backspace(),
+            RootInput::CompositionControl(CompositionControl::Escape) => self.apply_escape(),
+            RootInput::SpaceBoundary | RootInput::PunctuationBoundary(_) => {
+                let text = self.rendered.clone();
+                self.clear();
+                text
+            }
+            RootInput::CaretMoveBoundary(_) | RootInput::ShortcutBoundary => {
+                let text = self.rendered.clone();
+                self.clear();
+                text
+            }
+            RootInput::RawBoundary => {
+                let text = self.raw.clone();
+                self.clear();
+                text
+            }
+            RootInput::Lifecycle(LifecycleEvent::Finalize | LifecycleEvent::FocusLost) => {
+                let text = self.rendered.clone();
+                self.clear();
+                text
+            }
+            RootInput::Lifecycle(_) => {
+                self.clear();
+                String::new()
+            }
+        };
+        LanguageTransitionResult { text }
     }
 
     fn state(&self) -> LanguageState {
@@ -205,9 +215,9 @@ mod tests {
     fn type_text(raw: &str) -> String {
         let mut machine = Machine::new();
         for key in raw.chars() {
-            machine.type_key(key);
+            machine.apply_character(key);
         }
-        machine.finalize()
+        machine.rendered.clone()
     }
 
     #[test]
@@ -238,19 +248,19 @@ mod tests {
     #[test]
     fn backspace_restores_previous_telex_state() {
         let mut machine = Machine::new();
-        machine.type_key('e');
-        assert_eq!(machine.type_key('e'), "ê");
-        assert_eq!(machine.backspace(), "e");
+        machine.apply_character('e');
+        assert_eq!(machine.apply_character('e'), "ê");
+        assert_eq!(machine.apply_backspace(), "e");
     }
 
     #[test]
     fn raw_escape_keeps_physical_sequence() {
         let mut machine = Machine::new();
-        machine.type_key('e');
-        machine.type_key('s');
+        machine.apply_character('e');
+        machine.apply_character('s');
         assert_eq!(machine.state().rendered, "é");
         assert_eq!(machine.state().raw, "es");
-        assert_eq!(machine.escape(), "es");
+        assert_eq!(machine.apply_escape(), "es");
     }
 
     #[test]

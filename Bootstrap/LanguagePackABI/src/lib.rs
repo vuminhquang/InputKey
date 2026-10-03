@@ -1,5 +1,6 @@
 use inputkey_core_abstractions::{
-    LanguageConfig, LanguageMachinePort, LanguageMetadata, LanguagePackPort,
+    CaretMoveCause, CompositionControl, LanguageConfig, LanguageMachinePort, LanguageMetadata,
+    LanguagePackPort, LifecycleEvent, RootInput, RootPhase, RootTransition,
 };
 use serde_json::{json, Value};
 use std::{
@@ -10,10 +11,15 @@ use std::{
     },
 };
 
+struct SessionEntry {
+    machine: Box<dyn LanguageMachinePort>,
+    last_result: String,
+}
+
 pub struct PackHost {
     pack: Arc<dyn LanguagePackPort>,
     next: AtomicU64,
-    sessions: Mutex<HashMap<u64, Box<dyn LanguageMachinePort>>>,
+    sessions: Mutex<HashMap<u64, SessionEntry>>,
 }
 
 impl PackHost {
@@ -36,7 +42,13 @@ impl PackHost {
         };
         let handle = self.next.fetch_add(1, Ordering::Relaxed).max(1);
         if let Ok(mut sessions) = self.sessions.lock() {
-            sessions.insert(handle, machine);
+            sessions.insert(
+                handle,
+                SessionEntry {
+                    machine,
+                    last_result: String::new(),
+                },
+            );
             handle
         } else {
             0
@@ -49,101 +61,133 @@ impl PackHost {
         }
     }
 
-    pub fn accepts_key(&self, handle: u64, key: char) -> bool {
-        self.sessions
-            .lock()
-            .ok()
-            .and_then(|sessions| sessions.get(&handle).map(|m| m.accepts_key(key)))
-            .unwrap_or(false)
-    }
-
-    pub fn type_key(&self, handle: u64, key: char) -> String {
-        self.with_mut(handle, |machine| machine.type_key(key))
-    }
-
-    pub fn backspace(&self, handle: u64) -> String {
-        self.with_mut(handle, |machine| machine.backspace())
-    }
-
-    pub fn escape(&self, handle: u64) -> String {
-        self.with_mut(handle, |machine| machine.escape())
-    }
-
-    pub fn finalize(&self, handle: u64) -> String {
-        self.with_mut(handle, |machine| machine.finalize())
-    }
-
-    pub fn correct_boundary(&self, handle: u64) -> String {
-        self.with_mut(handle, |machine| machine.correct_boundary())
-    }
-
-    pub fn reset(&self, handle: u64) {
-        let _ = self.with_mut(handle, |machine| {
-            machine.reset();
-            String::new()
-        });
-    }
-
-    pub fn rendered(&self, handle: u64) -> String {
-        self.with_ref(handle, |machine| machine.rendered())
-    }
-
-    pub fn raw(&self, handle: u64) -> String {
-        self.with_ref(handle, |machine| machine.raw())
-    }
-
-    pub fn has_history(&self, handle: u64) -> bool {
-        self.sessions
-            .lock()
-            .ok()
-            .and_then(|sessions| sessions.get(&handle).map(|m| m.history_active()))
-            .unwrap_or(false)
-    }
-
-    pub fn state_json(&self, handle: u64) -> String {
-        self.with_ref(handle, |machine| {
-            let state = machine.state();
-            json!({
-                "raw": state.raw,
-                "rendered": state.rendered,
-                "mode": state.mode,
-                "phase": state.phase
-            })
-            .to_string()
-        })
-    }
-
-    fn with_mut(
-        &self,
-        handle: u64,
-        action: impl FnOnce(&mut dyn LanguageMachinePort) -> String,
-    ) -> String {
-        self.sessions
-            .lock()
-            .ok()
-            .and_then(|mut sessions| {
-                sessions
-                    .get_mut(&handle)
-                    .map(|machine| action(machine.as_mut()))
-            })
-            .unwrap_or_default()
-    }
-
-    fn with_ref(
-        &self,
-        handle: u64,
-        action: impl FnOnce(&dyn LanguageMachinePort) -> String,
-    ) -> String {
+    pub fn accepts_character(&self, handle: u64, character: char) -> bool {
         self.sessions
             .lock()
             .ok()
             .and_then(|sessions| {
                 sessions
                     .get(&handle)
-                    .map(|machine| action(machine.as_ref()))
+                    .map(|entry| entry.machine.accepts_character(character))
+            })
+            .unwrap_or(false)
+    }
+
+    pub fn transition_json(&self, handle: u64, text: &str) -> bool {
+        let Some(transition) = parse_transition(text) else {
+            return false;
+        };
+        let Ok(mut sessions) = self.sessions.lock() else {
+            return false;
+        };
+        let Some(entry) = sessions.get_mut(&handle) else {
+            return false;
+        };
+        entry.last_result = entry.machine.on_transition(transition).text;
+        true
+    }
+
+    pub fn result(&self, handle: u64) -> String {
+        self.sessions
+            .lock()
+            .ok()
+            .and_then(|sessions| sessions.get(&handle).map(|entry| entry.last_result.clone()))
+            .unwrap_or_default()
+    }
+
+    pub fn state_json(&self, handle: u64) -> String {
+        self.sessions
+            .lock()
+            .ok()
+            .and_then(|sessions| {
+                sessions.get(&handle).map(|entry| {
+                    let state = entry.machine.state();
+                    json!({
+                        "raw": state.raw,
+                        "rendered": state.rendered,
+                        "mode": state.mode,
+                        "phase": state.phase
+                    })
+                    .to_string()
+                })
             })
             .unwrap_or_default()
     }
+}
+
+fn parse_phase(value: &str) -> Option<RootPhase> {
+    Some(match value {
+        "idle" => RootPhase::Idle,
+        "composing" => RootPhase::Composing,
+        "space_boundary" => RootPhase::SpaceBoundary,
+        "punctuation_boundary" => RootPhase::PunctuationBoundary,
+        "caret_move_boundary" => RootPhase::CaretMoveBoundary,
+        "shortcut_boundary" => RootPhase::ShortcutBoundary,
+        "composition_control" => RootPhase::CompositionControl,
+        "raw_boundary" => RootPhase::RawBoundary,
+        "lifecycle" => RootPhase::Lifecycle,
+        _ => return None,
+    })
+}
+
+fn parse_caret_cause(value: &str) -> CaretMoveCause {
+    match value {
+        "mouse" => CaretMoveCause::Mouse,
+        "enter" => CaretMoveCause::Enter,
+        "tab" => CaretMoveCause::Tab,
+        "left" => CaretMoveCause::Left,
+        "right" => CaretMoveCause::Right,
+        "up" => CaretMoveCause::Up,
+        "down" => CaretMoveCause::Down,
+        "home" => CaretMoveCause::Home,
+        "end" => CaretMoveCause::End,
+        "page_up" => CaretMoveCause::PageUp,
+        "page_down" => CaretMoveCause::PageDown,
+        "delete" => CaretMoveCause::Delete,
+        "insert" => CaretMoveCause::Insert,
+        _ => CaretMoveCause::Other,
+    }
+}
+
+fn parse_input(kind: &str, value: &str) -> Option<RootInput> {
+    Some(match kind {
+        "character" => RootInput::Character(value.chars().next()?),
+        "space_boundary" => RootInput::SpaceBoundary,
+        "punctuation_boundary" => RootInput::PunctuationBoundary(value.chars().next()?),
+        "caret_move_boundary" => RootInput::CaretMoveBoundary(parse_caret_cause(value)),
+        "shortcut_boundary" => RootInput::ShortcutBoundary,
+        "composition_control" => RootInput::CompositionControl(match value {
+            "backspace" => CompositionControl::Backspace,
+            "escape" => CompositionControl::Escape,
+            _ => return None,
+        }),
+        "raw_boundary" => RootInput::RawBoundary,
+        "lifecycle" => RootInput::Lifecycle(match value {
+            "reset" => LifecycleEvent::Reset,
+            "focus_lost" => LifecycleEvent::FocusLost,
+            "context_destroyed" => LifecycleEvent::ContextDestroyed,
+            "disabled" => LifecycleEvent::Disabled,
+            "language_changed" => LifecycleEvent::LanguageChanged,
+            _ => LifecycleEvent::Finalize,
+        }),
+        _ => return None,
+    })
+}
+
+fn parse_transition(text: &str) -> Option<RootTransition> {
+    let value: Value = serde_json::from_str(text).ok()?;
+    let from = parse_phase(value.get("from")?.as_str()?)?;
+    let to = parse_phase(value.get("to")?.as_str()?)?;
+    let kind = value.get("kind")?.as_str()?;
+    let detail = value
+        .get("value")
+        .and_then(Value::as_str)
+        .unwrap_or_default();
+    Some(RootTransition {
+        from,
+        to,
+        input: parse_input(kind, detail)?,
+    })
 }
 
 /// Copies UTF-8 into caller-provided storage and returns the full byte length.

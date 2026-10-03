@@ -1,5 +1,7 @@
 use crate::config::{EngineConfig, EngineFactory};
-use inputkey_core_abstractions::TypingEnginePort;
+use inputkey_core_abstractions::{
+    CaretMoveCause, CompositionControl, LifecycleEvent, RootInput, TypingEnginePort,
+};
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::mem::ManuallyDrop;
@@ -24,7 +26,7 @@ use windows::{
                 GetKeyState, GetKeyboardLayout, GetKeyboardState, MapVirtualKeyExW, ToUnicodeEx,
                 MAPVK_VK_TO_VSC, VK_BACK, VK_CONTROL, VK_DELETE, VK_DOWN, VK_END, VK_ESCAPE,
                 VK_HOME, VK_INSERT, VK_LEFT, VK_LWIN, VK_MENU, VK_NEXT, VK_PRIOR, VK_RETURN,
-                VK_RIGHT, VK_RWIN, VK_SHIFT, VK_SPACE, VK_TAB, VK_UP,
+                VK_RIGHT, VK_RMENU, VK_RWIN, VK_SHIFT, VK_SPACE, VK_TAB, VK_UP,
             },
             TextServices::{
                 ITfComposition, ITfCompositionSink, ITfCompositionSink_Impl, ITfContext,
@@ -56,13 +58,22 @@ fn pointer_error() -> Error {
     Error::from_hresult(E_POINTER)
 }
 
-fn commit_then_pass_key(vk: u32) -> bool {
-    [
-        VK_RETURN, VK_TAB, VK_LEFT, VK_RIGHT, VK_UP, VK_DOWN, VK_HOME, VK_END, VK_PRIOR, VK_NEXT,
-        VK_DELETE, VK_INSERT,
-    ]
-    .iter()
-    .any(|key| vk == key.0 as u32)
+fn caret_move_cause(vk: u32) -> Option<CaretMoveCause> {
+    Some(match vk {
+        x if x == VK_RETURN.0 as u32 => CaretMoveCause::Enter,
+        x if x == VK_TAB.0 as u32 => CaretMoveCause::Tab,
+        x if x == VK_LEFT.0 as u32 => CaretMoveCause::Left,
+        x if x == VK_RIGHT.0 as u32 => CaretMoveCause::Right,
+        x if x == VK_UP.0 as u32 => CaretMoveCause::Up,
+        x if x == VK_DOWN.0 as u32 => CaretMoveCause::Down,
+        x if x == VK_HOME.0 as u32 => CaretMoveCause::Home,
+        x if x == VK_END.0 as u32 => CaretMoveCause::End,
+        x if x == VK_PRIOR.0 as u32 => CaretMoveCause::PageUp,
+        x if x == VK_NEXT.0 as u32 => CaretMoveCause::PageDown,
+        x if x == VK_DELETE.0 as u32 => CaretMoveCause::Delete,
+        x if x == VK_INSERT.0 as u32 => CaretMoveCause::Insert,
+        _ => return None,
+    })
 }
 
 fn is_raw_boundary_space(vk: u32, shift: bool, control: bool, alt: bool, win: bool) -> bool {
@@ -123,7 +134,9 @@ impl Runtime {
     }
 
     fn reset(&mut self) {
-        self.engine.reset();
+        let _ = self
+            .engine
+            .dispatch(RootInput::Lifecycle(LifecycleEvent::Reset));
         self.composition = None;
         self.swallowed = [false; 256];
     }
@@ -606,16 +619,23 @@ impl TextService {
     }
 
     fn commit_traced_boundary(&self, vk: u32) {
-        if !commit_then_pass_key(vk) || !self.control.enabled.load(Ordering::Acquire) {
+        if !self.control.enabled.load(Ordering::Acquire) {
             return;
         }
+        let input = if let Some(cause) = caret_move_cause(vk) {
+            RootInput::CaretMoveBoundary(cause)
+        } else if !Self::is_modifier_key(vk) && Self::has_command_modifier() {
+            RootInput::ShortcutBoundary
+        } else {
+            return;
+        };
 
         let text = {
             let mut runtime = self.control.runtime.lock().expect("runtime lock");
             if !runtime.active() {
                 return;
             }
-            runtime.engine.natural_boundary()
+            runtime.engine.dispatch(input)
         };
 
         let Ok(context) = self.focused_context() else {
@@ -641,11 +661,22 @@ impl TextService {
         )
     }
 
+    fn is_modifier_key(vk: u32) -> bool {
+        [VK_SHIFT, VK_CONTROL, VK_MENU, VK_LWIN, VK_RWIN]
+            .iter()
+            .any(|key| vk == key.0 as u32)
+    }
+
+    fn alt_graph_down() -> bool {
+        Self::modifier_down(VK_RMENU.0 as i32) && Self::modifier_down(VK_CONTROL.0 as i32)
+    }
+
     fn has_command_modifier() -> bool {
-        Self::modifier_down(VK_CONTROL.0 as i32)
+        let command = Self::modifier_down(VK_CONTROL.0 as i32)
             || Self::modifier_down(VK_MENU.0 as i32)
             || Self::modifier_down(VK_LWIN.0 as i32)
-            || Self::modifier_down(VK_RWIN.0 as i32)
+            || Self::modifier_down(VK_RWIN.0 as i32);
+        command && !Self::alt_graph_down()
     }
 
     fn key_char(&self, vk: u32) -> Option<char> {
@@ -655,7 +686,7 @@ impl TextService {
             .lock()
             .expect("runtime lock")
             .engine
-            .accepts_key(ch)
+            .accepts_character(ch)
             .then_some(ch)
     }
 
@@ -695,13 +726,15 @@ impl TextService {
         Ok(moved.load(Ordering::Acquire))
     }
 
-    fn commit_mouse_boundary(&self) {
+    fn commit_caret_move_from_mouse(&self) {
         let text = {
             let mut runtime = self.control.runtime.lock().expect("runtime lock");
             if !runtime.active() {
                 return;
             }
-            runtime.engine.mouse_boundary()
+            runtime
+                .engine
+                .dispatch(RootInput::CaretMoveBoundary(CaretMoveCause::Mouse))
         };
         let Ok(context) = self.focused_context() else {
             self.fail_open();
@@ -723,7 +756,9 @@ impl TextService {
         if !active {
             return false;
         }
-        if commit_then_pass_key(vk) {
+        if caret_move_cause(vk).is_some()
+            || (!Self::is_modifier_key(vk) && Self::has_command_modifier())
+        {
             return false;
         }
         if vk == VK_BACK.0 as u32 || vk == VK_ESCAPE.0 as u32 {
@@ -756,7 +791,7 @@ impl TextService {
                 if !runtime.active() {
                     return Ok(BOOL::from(false));
                 }
-                runtime.engine.commit_raw_boundary()
+                runtime.engine.dispatch(RootInput::RawBoundary)
             };
             if request_edit(&self.control, context, EditAction::Commit(commit)).is_err() {
                 self.fail_open();
@@ -771,7 +806,7 @@ impl TextService {
         if let Some(ch) = self.key_char(vk) {
             let text = {
                 let mut runtime = self.control.runtime.lock().expect("runtime lock");
-                runtime.engine.type_key(ch)
+                runtime.engine.dispatch(RootInput::Character(ch))
             };
             if request_edit(
                 &self.control,
@@ -802,7 +837,9 @@ impl TextService {
                 if !runtime.active() {
                     return Ok(BOOL::from(false));
                 }
-                runtime.engine.backspace()
+                runtime
+                    .engine
+                    .dispatch(RootInput::CompositionControl(CompositionControl::Backspace))
             };
             if request_edit(
                 &self.control,
@@ -829,7 +866,9 @@ impl TextService {
                 if !runtime.active() {
                     return Ok(BOOL::from(false));
                 }
-                runtime.engine.escape()
+                runtime
+                    .engine
+                    .dispatch(RootInput::CompositionControl(CompositionControl::Escape))
             };
             if request_edit(
                 &self.control,
@@ -858,7 +897,13 @@ impl TextService {
             if !runtime.active() {
                 return Ok(BOOL::from(false));
             }
-            runtime.engine.decision_boundary(delimiter)
+            if delimiter == ' ' {
+                runtime.engine.dispatch(RootInput::SpaceBoundary)
+            } else {
+                runtime
+                    .engine
+                    .dispatch(RootInput::PunctuationBoundary(delimiter))
+            }
         };
         if request_edit(&self.control, context, EditAction::Commit(commit)).is_err() {
             self.fail_open();
@@ -983,7 +1028,7 @@ impl ITfMouseSink_Impl for TextService_Impl {
     fn OnMouseEvent(&self, _uedge: u32, _uquadrant: u32, dwbtnstatus: u32) -> Result<BOOL> {
         const BUTTON_MASK: u32 = 0x0073;
         if dwbtnstatus & BUTTON_MASK != 0 {
-            self.commit_mouse_boundary();
+            self.commit_caret_move_from_mouse();
         }
         Ok(BOOL::from(false))
     }
@@ -1060,15 +1105,25 @@ pub fn class_factory(factory: EngineFactory, config: EngineConfig) -> IClassFact
 
 #[cfg(test)]
 mod tests {
-    use super::{commit_then_pass_key, is_raw_boundary_space};
+    use super::{caret_move_cause, is_raw_boundary_space};
+    use inputkey_core_abstractions::CaretMoveCause;
     use windows::Win32::UI::Input::KeyboardAndMouse::{VK_DELETE, VK_LEFT, VK_RETURN, VK_SPACE};
 
     #[test]
-    fn natural_boundary_keys_are_trace_commit_then_pass() {
-        assert!(commit_then_pass_key(VK_RETURN.0 as u32));
-        assert!(commit_then_pass_key(VK_LEFT.0 as u32));
-        assert!(commit_then_pass_key(VK_DELETE.0 as u32));
-        assert!(!commit_then_pass_key(VK_SPACE.0 as u32));
+    fn caret_move_keys_are_trace_commit_then_pass() {
+        assert_eq!(
+            caret_move_cause(VK_RETURN.0 as u32),
+            Some(CaretMoveCause::Enter)
+        );
+        assert_eq!(
+            caret_move_cause(VK_LEFT.0 as u32),
+            Some(CaretMoveCause::Left)
+        );
+        assert_eq!(
+            caret_move_cause(VK_DELETE.0 as u32),
+            Some(CaretMoveCause::Delete)
+        );
+        assert_eq!(caret_move_cause(VK_SPACE.0 as u32), None);
     }
 
     #[test]

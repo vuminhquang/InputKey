@@ -123,42 +123,23 @@ pub extern "C" fn inputkey_catalog_json() {
 /// # Safety
 /// p points to n UTF-8 bytes when n > 0.
 #[no_mangle]
-pub unsafe extern "C" fn inputkey_accepts_key_utf8(h: u32, p: *const u8, n: usize) -> u32 {
-    let key = unsafe { read_utf8(p, n) }.chars().next();
-    let Some(key) = key else {
+pub unsafe extern "C" fn inputkey_accepts_character_utf8(h: u32, p: *const u8, n: usize) -> u32 {
+    let character = unsafe { read_utf8(p, n) }.chars().next();
+    let Some(character) = character else {
         return 0;
     };
     SESSIONS.with(|all| {
         all.borrow()
             .1
             .get(&h)
-            .map(|session| u32::from(session.machine().accepts_key(key)))
+            .map(|session| u32::from(session.machine().accepts_character(character)))
             .unwrap_or(0)
     })
 }
 
-/// # Safety
-/// p points to n UTF-8 bytes when n > 0.
-#[no_mangle]
-pub unsafe extern "C" fn inputkey_key_utf8(h: u32, p: *const u8, n: usize) {
-    let key = unsafe { read_utf8(p, n) };
-    action(h, |s| s.handle(event(InputType::Key, key)).rendered);
-}
-
-/// # Safety
-/// p points to n UTF-8 bytes containing one delimiter.
-#[no_mangle]
-pub unsafe extern "C" fn inputkey_decision_boundary_utf8(h: u32, p: *const u8, n: usize) {
-    let delimiter = unsafe { read_utf8(p, n) };
-    action(h, |s| {
-        s.handle(event(InputType::DecisionBoundary, delimiter))
-            .commit
-    });
-}
-
-fn cmd(h: u32, kind: InputType, commit: bool) {
-    action(h, |s| {
-        let out = s.handle(event(kind, String::new()));
+fn cmd(h: u32, kind: InputType, key: String, commit: bool) {
+    action(h, |session| {
+        let out = session.handle(event(kind, key));
         if commit {
             out.commit
         } else {
@@ -167,39 +148,69 @@ fn cmd(h: u32, kind: InputType, commit: bool) {
     });
 }
 
+/// # Safety
+/// p points to n UTF-8 bytes containing one character.
 #[no_mangle]
-pub extern "C" fn inputkey_backspace(h: u32) {
-    cmd(h, InputType::Backspace, false)
+pub unsafe extern "C" fn inputkey_character_utf8(h: u32, p: *const u8, n: usize) {
+    cmd(h, InputType::Character, unsafe { read_utf8(p, n) }, false);
 }
 
 #[no_mangle]
-pub extern "C" fn inputkey_escape(h: u32) {
-    cmd(h, InputType::Escape, false)
+pub extern "C" fn inputkey_space_boundary(h: u32) {
+    cmd(h, InputType::SpaceBoundary, String::new(), true);
+}
+
+/// # Safety
+/// p points to n UTF-8 bytes containing one punctuation character.
+#[no_mangle]
+pub unsafe extern "C" fn inputkey_punctuation_boundary_utf8(h: u32, p: *const u8, n: usize) {
+    cmd(
+        h,
+        InputType::PunctuationBoundary,
+        unsafe { read_utf8(p, n) },
+        true,
+    );
+}
+
+/// # Safety
+/// p points to n UTF-8 bytes naming the caret move cause.
+#[no_mangle]
+pub unsafe extern "C" fn inputkey_caret_move_boundary_utf8(h: u32, p: *const u8, n: usize) {
+    cmd(
+        h,
+        InputType::CaretMoveBoundary,
+        unsafe { read_utf8(p, n) },
+        true,
+    );
 }
 
 #[no_mangle]
-pub extern "C" fn inputkey_finalize(h: u32) {
-    cmd(h, InputType::Finalize, true)
+pub extern "C" fn inputkey_shortcut_boundary(h: u32) {
+    cmd(h, InputType::ShortcutBoundary, String::new(), true);
+}
+
+/// # Safety
+/// p points to n UTF-8 bytes naming the composition control.
+#[no_mangle]
+pub unsafe extern "C" fn inputkey_composition_control_utf8(h: u32, p: *const u8, n: usize) {
+    cmd(
+        h,
+        InputType::CompositionControl,
+        unsafe { read_utf8(p, n) },
+        false,
+    );
 }
 
 #[no_mangle]
-pub extern "C" fn inputkey_commit_raw_boundary(h: u32) {
-    cmd(h, InputType::CommitRawBoundary, true)
+pub extern "C" fn inputkey_raw_boundary(h: u32) {
+    cmd(h, InputType::RawBoundary, String::new(), true);
 }
 
+/// # Safety
+/// p points to n UTF-8 bytes naming the lifecycle event.
 #[no_mangle]
-pub extern "C" fn inputkey_natural_boundary(h: u32) {
-    cmd(h, InputType::NaturalBoundary, true)
-}
-
-#[no_mangle]
-pub extern "C" fn inputkey_mouse_boundary(h: u32) {
-    cmd(h, InputType::MouseBoundary, true)
-}
-
-#[no_mangle]
-pub extern "C" fn inputkey_reset(h: u32) {
-    cmd(h, InputType::Reset, false)
+pub unsafe extern "C" fn inputkey_lifecycle_utf8(h: u32, p: *const u8, n: usize) {
+    cmd(h, InputType::Lifecycle, unsafe { read_utf8(p, n) }, true);
 }
 
 #[no_mangle]

@@ -1,9 +1,10 @@
 use inputkey_core_abstractions::{
-    LanguageConfig, LanguageMachinePort, LanguageMetadata, LanguageMethodMetadata,
-    LanguageOptionMetadata, LanguagePackPort, LanguageState,
+    CaretMoveCause, CompositionControl, LanguageConfig, LanguageMachinePort, LanguageMetadata,
+    LanguageMethodMetadata, LanguageOptionMetadata, LanguagePackPort, LanguageState,
+    LanguageTransitionResult, LifecycleEvent, RootInput, RootPhase, RootTransition,
 };
 use inputkey_language_pack_native_abi::{
-    LanguagePackApiV2, LANGUAGE_PACK_ABI_VERSION, LANGUAGE_PACK_ENTRYPOINT,
+    LanguagePackApiV3, LANGUAGE_PACK_ABI_VERSION, LANGUAGE_PACK_ENTRYPOINT,
 };
 use libloading::{Library, Symbol};
 use serde_json::{json, Value};
@@ -12,7 +13,7 @@ use std::{
     sync::Arc,
 };
 
-type Entry = unsafe extern "C" fn() -> *const LanguagePackApiV2;
+type Entry = unsafe extern "C" fn() -> *const LanguagePackApiV3;
 
 fn read_call(call: impl Fn(*mut u8, usize) -> usize) -> String {
     let n = call(std::ptr::null_mut(), 0);
@@ -22,11 +23,6 @@ fn read_call(call: impl Fn(*mut u8, usize) -> usize) -> String {
     let mut buffer = vec![0u8; n + 1];
     let actual = call(buffer.as_mut_ptr(), buffer.len()).min(n);
     String::from_utf8_lossy(&buffer[..actual]).into_owned()
-}
-
-fn mutate_then_read(mutate: impl FnOnce(), read: impl Fn(*mut u8, usize) -> usize) -> String {
-    mutate();
-    read_call(read)
 }
 
 fn metadata_from_json(text: &str) -> Result<LanguageMetadata, String> {
@@ -102,9 +98,75 @@ fn config_json(config: &LanguageConfig) -> String {
     json!({"method":config.method,"toggles":config.toggles,"values":config.values}).to_string()
 }
 
+fn phase_id(phase: RootPhase) -> &'static str {
+    match phase {
+        RootPhase::Idle => "idle",
+        RootPhase::Composing => "composing",
+        RootPhase::SpaceBoundary => "space_boundary",
+        RootPhase::PunctuationBoundary => "punctuation_boundary",
+        RootPhase::CaretMoveBoundary => "caret_move_boundary",
+        RootPhase::ShortcutBoundary => "shortcut_boundary",
+        RootPhase::CompositionControl => "composition_control",
+        RootPhase::RawBoundary => "raw_boundary",
+        RootPhase::Lifecycle => "lifecycle",
+    }
+}
+
+fn caret_id(cause: CaretMoveCause) -> &'static str {
+    match cause {
+        CaretMoveCause::Mouse => "mouse",
+        CaretMoveCause::Enter => "enter",
+        CaretMoveCause::Tab => "tab",
+        CaretMoveCause::Left => "left",
+        CaretMoveCause::Right => "right",
+        CaretMoveCause::Up => "up",
+        CaretMoveCause::Down => "down",
+        CaretMoveCause::Home => "home",
+        CaretMoveCause::End => "end",
+        CaretMoveCause::PageUp => "page_up",
+        CaretMoveCause::PageDown => "page_down",
+        CaretMoveCause::Delete => "delete",
+        CaretMoveCause::Insert => "insert",
+        CaretMoveCause::Other => "other",
+    }
+}
+
+fn transition_json(transition: RootTransition) -> String {
+    let (kind, value) = match transition.input {
+        RootInput::Character(character) => ("character", character.to_string()),
+        RootInput::SpaceBoundary => ("space_boundary", String::new()),
+        RootInput::PunctuationBoundary(delimiter) => {
+            ("punctuation_boundary", delimiter.to_string())
+        }
+        RootInput::CaretMoveBoundary(cause) => ("caret_move_boundary", caret_id(cause).to_owned()),
+        RootInput::ShortcutBoundary => ("shortcut_boundary", String::new()),
+        RootInput::CompositionControl(CompositionControl::Backspace) => {
+            ("composition_control", "backspace".into())
+        }
+        RootInput::CompositionControl(CompositionControl::Escape) => {
+            ("composition_control", "escape".into())
+        }
+        RootInput::RawBoundary => ("raw_boundary", String::new()),
+        RootInput::Lifecycle(event) => (
+            "lifecycle",
+            match event {
+                LifecycleEvent::Finalize => "finalize",
+                LifecycleEvent::Reset => "reset",
+                LifecycleEvent::FocusLost => "focus_lost",
+                LifecycleEvent::ContextDestroyed => "context_destroyed",
+                LifecycleEvent::Disabled => "disabled",
+                LifecycleEvent::LanguageChanged => "language_changed",
+            }
+            .into(),
+        ),
+    };
+    json!({"from":phase_id(transition.from),"to":phase_id(transition.to),"kind":kind,"value":value})
+        .to_string()
+}
+
 pub struct DynamicPack {
     library: Arc<Library>,
-    api: LanguagePackApiV2,
+    api: LanguagePackApiV3,
     metadata: LanguageMetadata,
 }
 
@@ -129,7 +191,7 @@ impl DynamicPack {
                 api.abi_version, LANGUAGE_PACK_ABI_VERSION
             ));
         }
-        if api.struct_size < std::mem::size_of::<LanguagePackApiV2>() {
+        if api.struct_size < std::mem::size_of::<LanguagePackApiV3>() {
             return Err("language-pack API table is too small".into());
         }
         let metadata = metadata_from_json(&read_call(|out, cap| unsafe {
@@ -165,29 +227,13 @@ impl LanguagePackPort for DynamicPack {
 struct DynamicMachine {
     #[allow(dead_code)]
     library: Arc<Library>,
-    api: LanguagePackApiV2,
+    api: LanguagePackApiV3,
     handle: u64,
 }
 
 impl DynamicMachine {
     fn query(&self, f: unsafe extern "C" fn(u64, *mut u8, usize) -> usize) -> String {
         read_call(|out, cap| unsafe { f(self.handle, out, cap) })
-    }
-
-    fn mutate_then_render(
-        &mut self,
-        f: unsafe extern "C" fn(u64, *mut u8, usize) -> usize,
-    ) -> String {
-        // Mutating ABI calls execute even when no output buffer is supplied.
-        // Calling them twice for a two-pass size/read sequence would apply one
-        // physical event twice. Execute exactly once, then read rendered state
-        // through the non-mutating query.
-        mutate_then_read(
-            || unsafe {
-                f(self.handle, std::ptr::null_mut(), 0);
-            },
-            |out, cap| unsafe { (self.api.rendered)(self.handle, out, cap) },
-        )
     }
 }
 
@@ -198,41 +244,30 @@ impl Drop for DynamicMachine {
 }
 
 impl LanguageMachinePort for DynamicMachine {
-    fn accepts_key(&self, key: char) -> bool {
-        let mut b = [0u8; 4];
-        let s = key.encode_utf8(&mut b);
-        unsafe { (self.api.accepts_key)(self.handle, s.as_ptr(), s.len()) != 0 }
+    fn accepts_character(&self, character: char) -> bool {
+        let mut buffer = [0u8; 4];
+        let text = character.encode_utf8(&mut buffer);
+        unsafe { (self.api.accepts_character)(self.handle, text.as_ptr(), text.len()) != 0 }
     }
-    fn type_key(&mut self, key: char) -> String {
-        let mut b = [0u8; 4];
-        let s = key.encode_utf8(&mut b);
-        mutate_then_read(
-            || unsafe {
-                (self.api.key_utf8)(self.handle, s.as_ptr(), s.len(), std::ptr::null_mut(), 0);
+
+    fn on_transition(&mut self, transition: RootTransition) -> LanguageTransitionResult {
+        let json = transition_json(transition);
+        let ok = unsafe { (self.api.transition_json)(self.handle, json.as_ptr(), json.len()) != 0 };
+        LanguageTransitionResult {
+            text: if ok {
+                self.query(self.api.result)
+            } else {
+                String::new()
             },
-            |out, cap| unsafe { (self.api.rendered)(self.handle, out, cap) },
-        )
+        }
     }
-    fn backspace(&mut self) -> String {
-        self.mutate_then_render(self.api.backspace)
-    }
-    fn escape(&mut self) -> String {
-        self.mutate_then_render(self.api.escape)
-    }
-    fn finalize(&mut self) -> String {
-        self.mutate_then_render(self.api.finalize)
-    }
-    fn correct_boundary(&mut self) -> String {
-        self.mutate_then_render(self.api.correct_boundary)
-    }
-    fn reset(&mut self) {
-        unsafe { (self.api.reset)(self.handle) }
-    }
+
     fn state(&self) -> LanguageState {
         let text = self.query(self.api.state_json);
-        let v: Value = serde_json::from_str(&text).unwrap_or(Value::Null);
-        let get = |n: &str| {
-            v.get(n)
+        let value: Value = serde_json::from_str(&text).unwrap_or(Value::Null);
+        let get = |name: &str| {
+            value
+                .get(name)
                 .and_then(Value::as_str)
                 .unwrap_or_default()
                 .to_owned()
@@ -243,15 +278,6 @@ impl LanguageMachinePort for DynamicMachine {
             mode: get("mode"),
             phase: get("phase"),
         }
-    }
-    fn rendered(&self) -> String {
-        self.query(self.api.rendered)
-    }
-    fn raw(&self) -> String {
-        self.query(self.api.raw)
-    }
-    fn history_active(&self) -> bool {
-        unsafe { (self.api.has_history)(self.handle) != 0 }
     }
 }
 
@@ -350,27 +376,18 @@ pub fn discover() -> Vec<Arc<dyn LanguagePackPort>> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::cell::Cell;
 
     #[test]
-    fn mutating_pack_call_executes_once_before_render_query() {
-        let mutations = Cell::new(0usize);
-        let rendered = "đ".as_bytes();
-
-        let text = mutate_then_read(
-            || mutations.set(mutations.get() + 1),
-            |out, cap| {
-                if !out.is_null() && cap > rendered.len() {
-                    unsafe {
-                        std::ptr::copy_nonoverlapping(rendered.as_ptr(), out, rendered.len());
-                        *out.add(rendered.len()) = 0;
-                    }
-                }
-                rendered.len()
-            },
-        );
-
-        assert_eq!(mutations.get(), 1);
-        assert_eq!(text, "đ");
+    fn transition_json_preserves_root_state_and_cause() {
+        let transition = RootTransition {
+            from: RootPhase::Composing,
+            to: RootPhase::CaretMoveBoundary,
+            input: RootInput::CaretMoveBoundary(CaretMoveCause::Left),
+        };
+        let value: Value = serde_json::from_str(&transition_json(transition)).unwrap();
+        assert_eq!(value["from"], "composing");
+        assert_eq!(value["to"], "caret_move_boundary");
+        assert_eq!(value["kind"], "caret_move_boundary");
+        assert_eq!(value["value"], "left");
     }
 }

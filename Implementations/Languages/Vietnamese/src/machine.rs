@@ -1,7 +1,10 @@
 use std::collections::{HashMap, HashSet};
 use std::sync::OnceLock;
 
-use inputkey_core_abstractions::{LanguageMachinePort, LanguageState, LexiconPort};
+use inputkey_core_abstractions::{
+    CompositionControl, LanguageMachinePort, LanguageState, LanguageTransitionResult, LexiconPort,
+    LifecycleEvent, RootInput, RootTransition,
+};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Tone {
@@ -1979,6 +1982,20 @@ impl Machine {
         committed
     }
 
+    fn apply_correcting_boundary_commit(&mut self) -> String {
+        let committed = self.apply_correct_boundary();
+        self.history.clear();
+        self.clear();
+        committed
+    }
+
+    fn apply_displayed_commit(&mut self) -> String {
+        let committed = self.rendered.clone();
+        self.history.clear();
+        self.clear();
+        committed
+    }
+
     fn apply_commit_raw_boundary(&mut self) -> String {
         let committed = self.raw.clone();
         self.history.clear();
@@ -2025,83 +2042,47 @@ impl Machine {
             }
         }
     }
-
-    pub fn type_key(&mut self, key: char) -> String {
-        self.transition(FsmEvent::Key(key))
-    }
-
-    pub fn backspace(&mut self) -> String {
-        self.transition(FsmEvent::Backspace)
-    }
-
-    pub fn escape(&mut self) -> String {
-        self.transition(FsmEvent::Escape)
-    }
-
-    pub fn finalize(&mut self) -> String {
-        self.apply_finalize()
-    }
-
-    pub fn correct_boundary(&mut self) -> String {
-        self.apply_correct_boundary()
-    }
-
-    pub fn commit_boundary(&mut self) -> String {
-        self.transition(FsmEvent::CommitBoundary)
-    }
-
-    pub fn commit_raw_boundary(&mut self) -> String {
-        self.transition(FsmEvent::CommitRawBoundary)
-    }
-
-    pub fn reset(&mut self) {
-        let _ = self.transition(FsmEvent::Reset);
-    }
-
-    pub fn has_history(&self) -> bool {
-        !self.history.is_empty()
-    }
 }
 
 pub fn process(raw: &str, options: Options, lexicon: Option<Box<dyn LexiconPort>>) -> String {
     let mut machine = Machine::new(options, lexicon);
     for key in raw.chars() {
-        machine.type_key(key);
+        machine.transition(FsmEvent::Key(key));
     }
     machine.rendered_text().to_owned()
 }
 
 impl LanguageMachinePort for Machine {
-    fn accepts_key(&self, key: char) -> bool {
+    fn accepts_character(&self, character: char) -> bool {
         if self.options.method.eq_ignore_ascii_case("vni") {
-            key.is_ascii_alphanumeric()
+            character.is_ascii_alphanumeric()
         } else {
-            key.is_ascii_alphabetic() || matches!(key, '[' | ']')
+            character.is_ascii_alphabetic() || matches!(character, '[' | ']')
         }
     }
 
-    fn type_key(&mut self, key: char) -> String {
-        Machine::type_key(self, key)
-    }
-
-    fn backspace(&mut self) -> String {
-        Machine::backspace(self)
-    }
-
-    fn escape(&mut self) -> String {
-        Machine::escape(self)
-    }
-
-    fn finalize(&mut self) -> String {
-        self.apply_finalize()
-    }
-
-    fn correct_boundary(&mut self) -> String {
-        Machine::correct_boundary(self)
-    }
-
-    fn reset(&mut self) {
-        Machine::reset(self);
+    fn on_transition(&mut self, transition: RootTransition) -> LanguageTransitionResult {
+        let text = match transition.input {
+            RootInput::Character(character) => self.transition(FsmEvent::Key(character)),
+            RootInput::CompositionControl(CompositionControl::Backspace) => {
+                self.transition(FsmEvent::Backspace)
+            }
+            RootInput::CompositionControl(CompositionControl::Escape) => {
+                self.transition(FsmEvent::Escape)
+            }
+            RootInput::SpaceBoundary | RootInput::PunctuationBoundary(_) => {
+                self.apply_correcting_boundary_commit()
+            }
+            RootInput::CaretMoveBoundary(_) | RootInput::ShortcutBoundary => {
+                self.apply_displayed_commit()
+            }
+            RootInput::RawBoundary => self.transition(FsmEvent::CommitRawBoundary),
+            RootInput::Lifecycle(LifecycleEvent::Finalize | LifecycleEvent::FocusLost) => {
+                self.transition(FsmEvent::CommitBoundary)
+            }
+            RootInput::Lifecycle(_) => self.transition(FsmEvent::Reset),
+        };
+        LanguageTransitionResult { text }
     }
 
     fn state(&self) -> LanguageState {
@@ -2127,17 +2108,5 @@ impl LanguageMachinePort for Machine {
             }
             .to_owned(),
         }
-    }
-
-    fn rendered(&self) -> String {
-        Machine::rendered_text(self).to_owned()
-    }
-
-    fn raw(&self) -> String {
-        Machine::raw_text(self).to_owned()
-    }
-
-    fn history_active(&self) -> bool {
-        !Machine::raw_text(self).is_empty()
     }
 }

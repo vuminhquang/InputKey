@@ -91,34 +91,81 @@ pub trait LexiconPort: Send + Sync {
     fn has_word(&self, word: &str) -> bool;
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum CaretMoveCause {
+    Mouse,
+    Enter,
+    Tab,
+    Left,
+    Right,
+    Up,
+    Down,
+    Home,
+    End,
+    PageUp,
+    PageDown,
+    Delete,
+    Insert,
+    Other,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum CompositionControl {
+    Backspace,
+    Escape,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum LifecycleEvent {
+    Finalize,
+    Reset,
+    FocusLost,
+    ContextDestroyed,
+    Disabled,
+    LanguageChanged,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum RootInput {
+    Character(char),
+    SpaceBoundary,
+    PunctuationBoundary(char),
+    CaretMoveBoundary(CaretMoveCause),
+    ShortcutBoundary,
+    CompositionControl(CompositionControl),
+    RawBoundary,
+    Lifecycle(LifecycleEvent),
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum RootPhase {
+    Idle,
+    Composing,
+    SpaceBoundary,
+    PunctuationBoundary,
+    CaretMoveBoundary,
+    ShortcutBoundary,
+    CompositionControl,
+    RawBoundary,
+    Lifecycle,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct RootTransition {
+    pub from: RootPhase,
+    pub to: RootPhase,
+    pub input: RootInput,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct LanguageTransitionResult {
+    pub text: String,
+}
+
 pub trait LanguageMachinePort: Send {
-    fn accepts_key(&self, key: char) -> bool;
-    fn type_key(&mut self, key: char) -> String;
-    fn backspace(&mut self) -> String;
-    fn escape(&mut self) -> String;
-    fn finalize(&mut self) -> String;
-
-    /// Gives the active language one correction opportunity when the root
-    /// enters its Space decision boundary. Languages without correction rules
-    /// keep normal finalize behavior.
-    fn correct_boundary(&mut self) -> String {
-        self.finalize()
-    }
-
-    fn reset(&mut self);
+    fn accepts_character(&self, character: char) -> bool;
+    fn on_transition(&mut self, transition: RootTransition) -> LanguageTransitionResult;
     fn state(&self) -> LanguageState;
-
-    fn rendered(&self) -> String {
-        self.state().rendered
-    }
-
-    fn raw(&self) -> String {
-        self.state().raw
-    }
-
-    fn history_active(&self) -> bool {
-        !self.state().raw.is_empty()
-    }
 }
 
 pub trait LanguagePackPort: Send + Sync {
@@ -133,17 +180,6 @@ pub trait LanguageCatalogPort: Send + Sync {
         language_id: &str,
         config: LanguageConfig,
     ) -> Result<Box<dyn LanguageMachinePort>, String>;
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum RootPhase {
-    Idle,
-    Composing,
-    CorrectionBoundary,
-    RawBoundary,
-    NaturalBoundary,
-    MouseBoundary,
-    FinalizeBoundary,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -186,18 +222,19 @@ pub trait EventSubscriber: Send + Sync {
 /// boundaries remain root semantics so every language observes the same Space,
 /// Shift+Space, navigation, and reset behavior.
 pub trait TypingEnginePort: Send {
-    fn accepts_key(&self, key: char) -> bool;
-    fn type_key(&mut self, key: char) -> String;
-    fn backspace(&mut self) -> String;
-    fn escape(&mut self) -> String;
-    fn finalize(&mut self) -> String;
-    fn decision_boundary(&mut self, delimiter: char) -> String;
-    fn commit_boundary(&mut self) -> String;
-    fn natural_boundary(&mut self) -> String;
-    fn mouse_boundary(&mut self) -> String;
-    fn commit_raw_boundary(&mut self) -> String;
-    fn reset(&mut self);
-    fn rendered(&self) -> String;
-    fn raw(&self) -> String;
-    fn history_active(&self) -> bool;
+    fn accepts_character(&self, character: char) -> bool;
+    fn dispatch(&mut self, input: RootInput) -> String;
+    fn state(&self) -> EngineState;
+
+    fn rendered(&self) -> String {
+        self.state().rendered
+    }
+
+    fn raw(&self) -> String {
+        self.state().raw
+    }
+
+    fn history_active(&self) -> bool {
+        !self.state().raw.is_empty()
+    }
 }

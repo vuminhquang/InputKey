@@ -35,7 +35,11 @@ for required in [
     "ITfMouseTracker",
     "AdviseMouseSink",
     "OnMouseEvent",
-    "mouse_boundary",
+    "RootInput::CaretMoveBoundary",
+    "CaretMoveCause::Mouse",
+    "RootInput::ShortcutBoundary",
+    "RootInput::SpaceBoundary",
+    "RootInput::PunctuationBoundary",
 ]:
     if required not in service:
         errors.append(f"WindowsTSF service missing lifecycle primitive: {required}")

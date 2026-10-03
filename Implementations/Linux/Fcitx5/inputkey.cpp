@@ -200,22 +200,33 @@ public:
         auto *state = ic->propertyFor(&factory_);
         auto handle = state->handle();
 
+        const char *caretCause = nullptr;
         switch (event.key().sym()) {
-        case FcitxKey_Left: case FcitxKey_Right:
-        case FcitxKey_Up: case FcitxKey_Down:
-        case FcitxKey_Home: case FcitxKey_End:
-        case FcitxKey_Page_Up: case FcitxKey_Page_Down:
-        case FcitxKey_Insert: case FcitxKey_Delete:
-        case FcitxKey_Tab: case FcitxKey_Return: case FcitxKey_KP_Enter:
-        case FcitxKey_KP_Left: case FcitxKey_KP_Right:
-        case FcitxKey_KP_Up: case FcitxKey_KP_Down:
-        case FcitxKey_KP_Home: case FcitxKey_KP_End:
-        case FcitxKey_KP_Page_Up: case FcitxKey_KP_Page_Down:
-        case FcitxKey_KP_Insert: case FcitxKey_KP_Delete:
-            flush(ic, handle, true);
+        case FcitxKey_Left: case FcitxKey_KP_Left: caretCause = "left"; break;
+        case FcitxKey_Right: case FcitxKey_KP_Right: caretCause = "right"; break;
+        case FcitxKey_Up: case FcitxKey_KP_Up: caretCause = "up"; break;
+        case FcitxKey_Down: case FcitxKey_KP_Down: caretCause = "down"; break;
+        case FcitxKey_Home: case FcitxKey_KP_Home: caretCause = "home"; break;
+        case FcitxKey_End: case FcitxKey_KP_End: caretCause = "end"; break;
+        case FcitxKey_Page_Up: case FcitxKey_KP_Page_Up: caretCause = "page_up"; break;
+        case FcitxKey_Page_Down: case FcitxKey_KP_Page_Down: caretCause = "page_down"; break;
+        case FcitxKey_Insert: case FcitxKey_KP_Insert: caretCause = "insert"; break;
+        case FcitxKey_Delete: case FcitxKey_KP_Delete: caretCause = "delete"; break;
+        case FcitxKey_Tab: caretCause = "tab"; break;
+        case FcitxKey_Return: case FcitxKey_KP_Enter: caretCause = "enter"; break;
+        default: break;
+        }
+        if (caretCause) {
+            if (inputkey_has_history(handle)) {
+                const auto length = std::strlen(caretCause);
+                auto committed = take([&](uint8_t *p, size_t n) {
+                    return inputkey_caret_move_boundary_utf8(
+                        handle, reinterpret_cast<const uint8_t *>(caretCause), length, p, n);
+                });
+                if (!committed.empty()) ic->commitString(committed);
+                clearPreedit(ic);
+            }
             return;
-        default:
-            break;
         }
 
         auto states = event.key().states();
@@ -230,7 +241,7 @@ public:
 
         if (rawBoundary && inputkey_has_history(handle)) {
             auto raw = take([&](uint8_t *p, size_t n) {
-                return inputkey_commit_raw_boundary(handle, p, n);
+                return inputkey_raw_boundary(handle, p, n);
             });
             ic->commitString(raw);
             clearPreedit(ic);
@@ -238,12 +249,21 @@ public:
             return;
         }
 
-        if (states.testAny(fcitx::KeyStates{
-                fcitx::KeyState::Ctrl,
-                fcitx::KeyState::Alt,
-                fcitx::KeyState::Super,
-                fcitx::KeyState::Hyper})) {
-            flush(ic, handle, true);
+        const bool ctrl = states.test(fcitx::KeyState::Ctrl);
+        const bool alt = states.test(fcitx::KeyState::Alt);
+        const bool commandChord =
+            states.testAny(fcitx::KeyStates{
+                fcitx::KeyState::Ctrl, fcitx::KeyState::Alt,
+                fcitx::KeyState::Super, fcitx::KeyState::Hyper})
+            && !(ctrl && alt);
+        if (commandChord) {
+            if (inputkey_has_history(handle)) {
+                auto committed = take([&](uint8_t *p, size_t n) {
+                    return inputkey_shortcut_boundary(handle, p, n);
+                });
+                if (!committed.empty()) ic->commitString(committed);
+                clearPreedit(ic);
+            }
             return;
         }
 
@@ -252,7 +272,10 @@ public:
                 updatePreedit(
                     ic,
                     take([&](uint8_t *p, size_t n) {
-                        return inputkey_backspace(handle, p, n);
+                        static const char control[] = "backspace";
+                        return inputkey_composition_control_utf8(
+                            handle, reinterpret_cast<const uint8_t *>(control),
+                            sizeof(control) - 1, p, n);
                     }));
                 event.filterAndAccept();
             }
@@ -264,7 +287,10 @@ public:
                 updatePreedit(
                     ic,
                     take([&](uint8_t *p, size_t n) {
-                        return inputkey_escape(handle, p, n);
+                        static const char control[] = "escape";
+                        return inputkey_composition_control_utf8(
+                            handle, reinterpret_cast<const uint8_t *>(control),
+                            sizeof(control) - 1, p, n);
                     }));
                 event.filterAndAccept();
             }
@@ -275,14 +301,14 @@ public:
         if (text.size() == 1 && !event.key().isModifier()) {
             const auto c = static_cast<unsigned char>(text[0]);
             if (c >= 0x20 && c <= 0x7e) {
-                if (inputkey_accepts_key_utf8(
+                if (inputkey_accepts_character_utf8(
                         handle,
                         reinterpret_cast<const uint8_t *>(text.data()),
                         text.size())) {
                     updatePreedit(
                         ic,
                         take([&](uint8_t *p, size_t n) {
-                            return inputkey_key_utf8(
+                            return inputkey_character_utf8(
                                 handle,
                                 reinterpret_cast<const uint8_t *>(text.data()),
                                 text.size(), p, n);
@@ -293,7 +319,10 @@ public:
 
                 if (inputkey_has_history(handle)) {
                     auto committed = take([&](uint8_t *p, size_t n) {
-                        return inputkey_decision_boundary_utf8(
+                        if (text == " ") {
+                            return inputkey_space_boundary(handle, p, n);
+                        }
+                        return inputkey_punctuation_boundary_utf8(
                             handle,
                             reinterpret_cast<const uint8_t *>(text.data()),
                             text.size(), p, n);
@@ -321,7 +350,12 @@ public:
         fcitx::InputContextEvent &event) override {
         auto *ic = event.inputContext();
         auto *state = ic->propertyFor(&factory_);
-        inputkey_reset(state->handle());
+        static const char lifecycle[] = "reset";
+        take([&](uint8_t *p, size_t n) {
+            return inputkey_lifecycle_utf8(
+                state->handle(), reinterpret_cast<const uint8_t *>(lifecycle),
+                sizeof(lifecycle) - 1, p, n);
+        });
         clearPreedit(ic);
     }
 
@@ -330,12 +364,17 @@ public:
         fcitx::InputContextEvent &event) override {
         auto *ic = event.inputContext();
         auto *state = ic->propertyFor(&factory_);
-        if (event.type() == fcitx::EventType::InputContextFocusOut) {
-            inputkey_reset(state->handle());
-            clearPreedit(ic);
-        } else {
-            flush(ic, state->handle(), true);
+        if (inputkey_has_history(state->handle())) {
+            const char *lifecycle = event.type() == fcitx::EventType::InputContextFocusOut
+                ? "focus_lost" : "finalize";
+            auto committed = take([&](uint8_t *p, size_t n) {
+                return inputkey_lifecycle_utf8(
+                    state->handle(), reinterpret_cast<const uint8_t *>(lifecycle),
+                    std::strlen(lifecycle), p, n);
+            });
+            if (!committed.empty()) ic->commitString(committed);
         }
+        clearPreedit(ic);
     }
 
 private:
@@ -472,15 +511,23 @@ private:
         uint64_t handle,
         bool keepDisplayed) {
         if (!inputkey_has_history(handle)) return;
-        auto value = keepDisplayed
-            ? take([&](uint8_t *p, size_t n) {
-                  return inputkey_natural_boundary(handle, p, n);
-              })
-            : take([&](uint8_t *p, size_t n) {
-                  return inputkey_finalize(handle, p, n);
-              });
+        std::string value;
+        if (keepDisplayed) {
+            static const char cause[] = "other";
+            value = take([&](uint8_t *p, size_t n) {
+                return inputkey_caret_move_boundary_utf8(
+                    handle, reinterpret_cast<const uint8_t *>(cause),
+                    sizeof(cause) - 1, p, n);
+            });
+        } else {
+            static const char lifecycle[] = "finalize";
+            value = take([&](uint8_t *p, size_t n) {
+                return inputkey_lifecycle_utf8(
+                    handle, reinterpret_cast<const uint8_t *>(lifecycle),
+                    sizeof(lifecycle) - 1, p, n);
+            });
+        }
         if (!value.empty()) ic->commitString(value);
-        if (!keepDisplayed) inputkey_reset(handle);
         clearPreedit(ic);
     }
 

@@ -131,7 +131,7 @@ pub extern "C" fn inputkey_catalog_json(out: *mut u8, cap: usize) -> usize {
 /// # Safety
 /// When len > 0, bytes must point to len readable bytes.
 #[no_mangle]
-pub unsafe extern "C" fn inputkey_accepts_key_utf8(
+pub unsafe extern "C" fn inputkey_accepts_character_utf8(
     handle: u64,
     bytes: *const u8,
     len: usize,
@@ -140,49 +140,77 @@ pub unsafe extern "C" fn inputkey_accepts_key_utf8(
         return 0;
     }
     let text = String::from_utf8_lossy(unsafe { std::slice::from_raw_parts(bytes, len) });
-    let Some(key) = text.chars().next() else {
+    let Some(character) = text.chars().next() else {
         return 0;
     };
     sessions()
         .lock()
         .ok()
-        .and_then(|all| all.get(&handle).map(|s| s.machine().accepts_key(key)))
+        .and_then(|all| {
+            all.get(&handle)
+                .map(|s| s.machine().accepts_character(character))
+        })
         .map(i32::from)
         .unwrap_or(0)
 }
 
-/// # Safety
-/// When len > 0, bytes must point to len readable bytes. out/cap must describe
-/// writable storage when supplied.
-#[no_mangle]
-pub unsafe extern "C" fn inputkey_key_utf8(
+fn command(
     handle: u64,
-    bytes: *const u8,
-    len: usize,
+    kind: InputType,
+    key: String,
+    commit: bool,
     out: *mut u8,
     cap: usize,
 ) -> usize {
-    if bytes.is_null() && len != 0 {
-        return copy("", out, cap);
-    }
-    let key = String::from_utf8_lossy(if len == 0 {
-        &[]
-    } else {
-        unsafe { std::slice::from_raw_parts(bytes, len) }
-    })
-    .into_owned();
     result(
         handle,
-        |s| s.handle(event(InputType::Key, key)).rendered,
+        |session| {
+            let output = session.handle(event(kind, key));
+            if commit {
+                output.commit
+            } else {
+                output.rendered
+            }
+        },
         out,
         cap,
     )
 }
 
 /// # Safety
-/// delimiter must point to a valid UTF-8 character when len > 0.
+/// When len > 0, bytes must point to len readable UTF-8 bytes.
 #[no_mangle]
-pub unsafe extern "C" fn inputkey_decision_boundary_utf8(
+pub unsafe extern "C" fn inputkey_character_utf8(
+    handle: u64,
+    bytes: *const u8,
+    len: usize,
+    out: *mut u8,
+    cap: usize,
+) -> usize {
+    if bytes.is_null() || len == 0 {
+        return copy("", out, cap);
+    }
+    let character =
+        String::from_utf8_lossy(unsafe { std::slice::from_raw_parts(bytes, len) }).into_owned();
+    command(handle, InputType::Character, character, false, out, cap)
+}
+
+#[no_mangle]
+pub extern "C" fn inputkey_space_boundary(handle: u64, out: *mut u8, cap: usize) -> usize {
+    command(
+        handle,
+        InputType::SpaceBoundary,
+        String::new(),
+        true,
+        out,
+        cap,
+    )
+}
+
+/// # Safety
+/// delimiter must point to one readable UTF-8 character.
+#[no_mangle]
+pub unsafe extern "C" fn inputkey_punctuation_boundary_utf8(
     handle: u64,
     delimiter: *const u8,
     len: usize,
@@ -194,74 +222,99 @@ pub unsafe extern "C" fn inputkey_decision_boundary_utf8(
     }
     let delimiter =
         String::from_utf8_lossy(unsafe { std::slice::from_raw_parts(delimiter, len) }).into_owned();
-    result(
+    command(
         handle,
-        |s| {
-            s.handle(event(InputType::DecisionBoundary, delimiter))
-                .commit
-        },
+        InputType::PunctuationBoundary,
+        delimiter,
+        true,
         out,
         cap,
     )
 }
 
-fn command(handle: u64, kind: InputType, commit: bool, out: *mut u8, cap: usize) -> usize {
-    result(
+/// # Safety
+/// cause must point to a readable UTF-8 caret-move cause.
+#[no_mangle]
+pub unsafe extern "C" fn inputkey_caret_move_boundary_utf8(
+    handle: u64,
+    cause: *const u8,
+    len: usize,
+    out: *mut u8,
+    cap: usize,
+) -> usize {
+    let cause = if cause.is_null() || len == 0 {
+        String::from("other")
+    } else {
+        String::from_utf8_lossy(unsafe { std::slice::from_raw_parts(cause, len) }).into_owned()
+    };
+    command(handle, InputType::CaretMoveBoundary, cause, true, out, cap)
+}
+
+#[no_mangle]
+pub extern "C" fn inputkey_shortcut_boundary(handle: u64, out: *mut u8, cap: usize) -> usize {
+    command(
         handle,
-        |s| {
-            let o = s.handle(event(kind, String::new()));
-            if commit {
-                o.commit
-            } else {
-                o.rendered
-            }
-        },
+        InputType::ShortcutBoundary,
+        String::new(),
+        true,
+        out,
+        cap,
+    )
+}
+
+/// # Safety
+/// control must point to `backspace` or `escape` UTF-8 bytes.
+#[no_mangle]
+pub unsafe extern "C" fn inputkey_composition_control_utf8(
+    handle: u64,
+    control: *const u8,
+    len: usize,
+    out: *mut u8,
+    cap: usize,
+) -> usize {
+    if control.is_null() || len == 0 {
+        return copy("", out, cap);
+    }
+    let control =
+        String::from_utf8_lossy(unsafe { std::slice::from_raw_parts(control, len) }).into_owned();
+    command(
+        handle,
+        InputType::CompositionControl,
+        control,
+        false,
         out,
         cap,
     )
 }
 
 #[no_mangle]
-pub extern "C" fn inputkey_backspace(h: u64, o: *mut u8, c: usize) -> usize {
-    command(h, InputType::Backspace, false, o, c)
+pub extern "C" fn inputkey_raw_boundary(handle: u64, out: *mut u8, cap: usize) -> usize {
+    command(
+        handle,
+        InputType::RawBoundary,
+        String::new(),
+        true,
+        out,
+        cap,
+    )
 }
 
+/// # Safety
+/// lifecycle must point to a readable UTF-8 lifecycle event name.
 #[no_mangle]
-pub extern "C" fn inputkey_escape(h: u64, o: *mut u8, c: usize) -> usize {
-    command(h, InputType::Escape, false, o, c)
-}
-
-#[no_mangle]
-pub extern "C" fn inputkey_finalize(h: u64, o: *mut u8, c: usize) -> usize {
-    command(h, InputType::Finalize, true, o, c)
-}
-
-#[no_mangle]
-pub extern "C" fn inputkey_commit_raw_boundary(h: u64, o: *mut u8, c: usize) -> usize {
-    command(h, InputType::CommitRawBoundary, true, o, c)
-}
-
-#[no_mangle]
-pub extern "C" fn inputkey_natural_boundary(h: u64, o: *mut u8, c: usize) -> usize {
-    command(h, InputType::NaturalBoundary, true, o, c)
-}
-
-#[no_mangle]
-pub extern "C" fn inputkey_mouse_boundary(h: u64, o: *mut u8, c: usize) -> usize {
-    command(h, InputType::MouseBoundary, true, o, c)
-}
-
-#[no_mangle]
-pub extern "C" fn inputkey_reset(h: u64) {
-    let _ = result(
-        h,
-        |s| {
-            s.handle(event(InputType::Reset, String::new()));
-            String::new()
-        },
-        std::ptr::null_mut(),
-        0,
-    );
+pub unsafe extern "C" fn inputkey_lifecycle_utf8(
+    handle: u64,
+    lifecycle: *const u8,
+    len: usize,
+    out: *mut u8,
+    cap: usize,
+) -> usize {
+    let lifecycle = if lifecycle.is_null() || len == 0 {
+        String::from("finalize")
+    } else {
+        String::from_utf8_lossy(unsafe { std::slice::from_raw_parts(lifecycle, len) }).into_owned()
+    };
+    command(handle, InputType::Lifecycle, lifecycle, true, out, cap)
 }
 
 #[no_mangle]
@@ -279,7 +332,10 @@ pub extern "C" fn inputkey_has_history(h: u64) -> i32 {
     sessions()
         .lock()
         .ok()
-        .and_then(|s| s.get(&h).map(|s| i32::from(s.machine().has_history())))
+        .and_then(|all| {
+            all.get(&h)
+                .map(|session| i32::from(!session.state().raw.is_empty()))
+        })
         .unwrap_or(0)
 }
 

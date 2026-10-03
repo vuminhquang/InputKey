@@ -64,12 +64,10 @@ pub struct Event {
 pub enum EventKind {
     #[default]
     Pass,
-    TypeChar,
-    Backspace,
-    Escape,
+    Character,
+    CompositionControl,
     RawBoundary,
-    FinalizeWithDelimiter,
-    NaturalBoundary,
-    MouseBoundary,
-    ResetOnly,
+    CaretMoveBoundary,
+    ShortcutBoundary,
+    Lifecycle,
 }

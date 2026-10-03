@@ -75,7 +75,7 @@ function send(input, key, extras = {}) {
     stopImmediatePropagation() { this.stopped = true; }
   };
   handlers.get('keydown')(event);
-  if (!event.prevented && key.length === 1) {
+  if (!event.prevented && key.length === 1 && !event.ctrlKey && !event.altKey && !event.metaKey) {
     input.setRangeText(key, input.selectionStart, input.selectionEnd);
   }
   return event;
@@ -112,7 +112,27 @@ test('Space decides whether an unfinished Vietnamese shape survives', () => {
   assert.equal(input.value, 'thaas ');
 });
 
-test('natural navigation boundary leaves the currently rendered text alone', () => {
+test('punctuation boundary shares Vietnamese correction policy', () => {
+  const input = new Input();
+  type(input, 'dduwocj');
+  send(input, '.');
+  assert.equal(input.value, 'được.');
+});
+
+test('shortcut boundary commits displayed text and passes the chord through', () => {
+  const input = new Input();
+  type(input, 'dd');
+  assert.equal(input.value, 'đ');
+
+  const shortcut = send(input, 'a', { ctrlKey: true, code: 'KeyA' });
+  assert.equal(shortcut.prevented, false);
+  assert.equal(input.value, 'đ');
+
+  send(input, 'a');
+  assert.equal(input.value, 'đa');
+});
+
+test('caret move boundary leaves the currently rendered text alone', () => {
   const input = new Input();
   type(input, 'dd');
   assert.equal(input.value, 'đ');
@@ -121,7 +141,7 @@ test('natural navigation boundary leaves the currently rendered text alone', () 
   assert.equal(input.value, 'đ');
 });
 
-test('mouse boundary ends the active Root composition before caret relocation', () => {
+test('mouse caret move ends the active Root composition before relocation', () => {
   const input = new Input();
   document.activeElement = input;
   type(input, 'dd');
@@ -150,18 +170,18 @@ test('selecting existing text and typing replaces the selection', () => {
 
 test('French Telex uses the same Root engine contract', () => {
   const engine = new InputKey.Engine({ language: 'fr', method: 'telex' });
-  for (const key of 'oe') engine.type(key);
+  for (const key of 'oe') engine.character(key);
   assert.equal(engine.rendered, 'œ');
-  engine.reset();
-  for (const key of 'cc') engine.type(key);
+  engine.lifecycle('reset');
+  for (const key of 'cc') engine.character(key);
   assert.equal(engine.rendered, 'ç');
-  engine.reset();
-  for (const key of 'ee') engine.type(key);
+  engine.lifecycle('reset');
+  for (const key of 'ee') engine.character(key);
   assert.equal(engine.rendered, 'ê');
-  engine.reset();
-  for (const key of 'es') engine.type(key);
+  engine.lifecycle('reset');
+  for (const key of 'es') engine.character(key);
   assert.equal(engine.rendered, 'é');
-  assert.equal(engine.decisionBoundary(' '), 'é ');
+  assert.equal(engine.spaceBoundary(), 'é ');
   engine.destroy();
 });
 
@@ -170,11 +190,15 @@ test('Rust WASM is self-contained and exposes the language-neutral ABI', async (
   assert.deepEqual(WebAssembly.Module.imports(module), []);
   const names = new Set(WebAssembly.Module.exports(module).map(item => item.name));
   for (const name of [
-    'inputkey_commit_raw_boundary',
-    'inputkey_natural_boundary',
-    'inputkey_mouse_boundary',
-    'inputkey_decision_boundary_utf8',
-    'inputkey_accepts_key_utf8',
+    'inputkey_character_utf8',
+    'inputkey_space_boundary',
+    'inputkey_punctuation_boundary_utf8',
+    'inputkey_caret_move_boundary_utf8',
+    'inputkey_shortcut_boundary',
+    'inputkey_composition_control_utf8',
+    'inputkey_raw_boundary',
+    'inputkey_lifecycle_utf8',
+    'inputkey_accepts_character_utf8',
     'inputkey_create_ex',
     'inputkey_catalog_json'
   ]) assert.ok(names.has(name), name);

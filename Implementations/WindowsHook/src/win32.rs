@@ -1,4 +1,5 @@
 use crate::{transition, Config, EngineConfig, EngineFactory, Event, EventKind, SpscRing};
+use inputkey_core_abstractions::{CaretMoveCause, CompositionControl, LifecycleEvent, RootInput};
 use inputkey_windows_clipboard::ClipboardPaste;
 use std::sync::atomic::{
     AtomicBool, AtomicPtr, AtomicU32, AtomicU64, AtomicU8, AtomicUsize, Ordering,
@@ -131,13 +132,38 @@ fn printable_char(vk: u32, mods: u8) -> Option<char> {
     }
 }
 
-fn natural_boundary_key(vk: u32) -> bool {
+fn caret_move_key(vk: u32) -> bool {
     [
         VK_RETURN, VK_TAB, VK_LEFT, VK_RIGHT, VK_UP, VK_DOWN, VK_HOME, VK_END, VK_PRIOR, VK_NEXT,
         VK_DELETE, VK_INSERT,
     ]
     .iter()
     .any(|key| vk == u32::from(*key))
+}
+
+fn caret_cause(vk: u32) -> CaretMoveCause {
+    match vk {
+        x if x == VK_RETURN as u32 => CaretMoveCause::Enter,
+        x if x == VK_TAB as u32 => CaretMoveCause::Tab,
+        x if x == VK_LEFT as u32 => CaretMoveCause::Left,
+        x if x == VK_RIGHT as u32 => CaretMoveCause::Right,
+        x if x == VK_UP as u32 => CaretMoveCause::Up,
+        x if x == VK_DOWN as u32 => CaretMoveCause::Down,
+        x if x == VK_HOME as u32 => CaretMoveCause::Home,
+        x if x == VK_END as u32 => CaretMoveCause::End,
+        x if x == VK_PRIOR as u32 => CaretMoveCause::PageUp,
+        x if x == VK_NEXT as u32 => CaretMoveCause::PageDown,
+        x if x == VK_DELETE as u32 => CaretMoveCause::Delete,
+        x if x == VK_INSERT as u32 => CaretMoveCause::Insert,
+        _ => CaretMoveCause::Other,
+    }
+}
+
+fn shortcut_boundary(mods: u8) -> bool {
+    let command = mods & (INPUT_MOD_CTRL | INPUT_MOD_ALT | INPUT_MOD_WIN) != 0;
+    let alt_graph = mods & (INPUT_MOD_CTRL | INPUT_MOD_ALT) == (INPUT_MOD_CTRL | INPUT_MOD_ALT)
+        && unsafe { GetKeyState(VK_RMENU as i32) < 0 };
+    command && !alt_graph
 }
 
 fn mark_suppressed_up(shared: &Shared, vk: u32) {
@@ -223,7 +249,7 @@ unsafe extern "system" fn mouse_proc(code: i32, wp: WPARAM, lp: LPARAM) -> LRESU
     }
 
     let target = crate::transport::canonical_target(focused_target());
-    if push(shared, EventKind::MouseBoundary, 0, 0, target) {
+    if push(shared, EventKind::CaretMoveBoundary, 0, 0, target) {
         shared.active.store(false, Ordering::Release);
         shared.active_target.store(0, Ordering::Release);
     }
@@ -282,6 +308,14 @@ unsafe extern "system" fn keyboard_proc(code: i32, wp: WPARAM, lp: LPARAM) -> LR
         return unsafe { CallNextHookEx(std::ptr::null_mut(), code, wp, lp) };
     }
 
+    if active && shortcut_boundary(mods) {
+        if push(shared, EventKind::ShortcutBoundary, vk, mods, target) {
+            shared.active.store(false, Ordering::Release);
+            shared.active_target.store(0, Ordering::Release);
+        }
+        return unsafe { CallNextHookEx(std::ptr::null_mut(), code, wp, lp) };
+    }
+
     if let Some(ch) = printable_char(vk, mods) {
         if active || accepts_char(shared, ch) {
             if !active
@@ -292,7 +326,7 @@ unsafe extern "system" fn keyboard_proc(code: i32, wp: WPARAM, lp: LPARAM) -> LR
             {
                 return unsafe { CallNextHookEx(std::ptr::null_mut(), code, wp, lp) };
             }
-            if push(shared, EventKind::TypeChar, vk, mods, target) {
+            if push(shared, EventKind::Character, vk, mods, target) {
                 shared.active.store(true, Ordering::Release);
                 shared
                     .active_target
@@ -308,23 +342,13 @@ unsafe extern "system" fn keyboard_proc(code: i32, wp: WPARAM, lp: LPARAM) -> LR
         return unsafe { CallNextHookEx(std::ptr::null_mut(), code, wp, lp) };
     }
 
-    if vk == VK_BACK as u32 {
-        if push(shared, EventKind::Backspace, vk, mods, target) {
+    if vk == VK_BACK as u32 || vk == VK_ESCAPE as u32 {
+        if push(shared, EventKind::CompositionControl, vk, mods, target) {
             mark_suppressed_up(shared, vk);
             return 1;
         }
-    } else if vk == VK_ESCAPE as u32 {
-        if push(shared, EventKind::Escape, vk, mods, target) {
-            mark_suppressed_up(shared, vk);
-            return 1;
-        }
-    } else if printable_char(vk, mods).is_some() {
-        if push(shared, EventKind::FinalizeWithDelimiter, vk, mods, target) {
-            mark_suppressed_up(shared, vk);
-            return 1;
-        }
-    } else if natural_boundary_key(vk) {
-        if push(shared, EventKind::NaturalBoundary, vk, mods, target) {
+    } else if caret_move_key(vk) {
+        if push(shared, EventKind::CaretMoveBoundary, vk, mods, target) {
             shared.active.store(false, Ordering::Release);
             shared.active_target.store(0, Ordering::Release);
         }
@@ -369,7 +393,7 @@ fn update_accepted(shared: &Shared, engine: &dyn inputkey_core_abstractions::Typ
     let mut words = [0u64; 2];
     for value in 0x20u8..=0x7e {
         let ch = value as char;
-        if engine.accepts_key(ch) {
+        if engine.accepts_character(ch) {
             words[(value / 64) as usize] |= 1u64 << (value % 64);
         }
     }
@@ -414,7 +438,7 @@ fn worker(shared: Arc<Shared>, factory: EngineFactory) {
             let target = event.target as HWND;
 
             match event.kind {
-                EventKind::TypeChar => {
+                EventKind::Character => {
                     let Some(ch) = printable_char(event.vk as u32, event.modifiers) else {
                         continue;
                     };
@@ -428,7 +452,8 @@ fn worker(shared: Arc<Shared>, factory: EngineFactory) {
                             | crate::transport::Capture::Denied => {
                                 let literal = ch.to_string();
                                 let _ = crate::synthetic::replay_literal(target, &literal);
-                                engine.reset();
+                                let _ =
+                                    engine.dispatch(RootInput::Lifecycle(LifecycleEvent::Reset));
                                 shared.active.store(false, Ordering::Release);
                                 shared.active_target.store(0, Ordering::Release);
                                 continue;
@@ -440,7 +465,7 @@ fn worker(shared: Arc<Shared>, factory: EngineFactory) {
                         .as_ref()
                         .is_some_and(|range| range.target() != target as usize)
                     {
-                        engine.reset();
+                        let _ = engine.dispatch(RootInput::Lifecycle(LifecycleEvent::Reset));
                         owned = None;
                         shared.active.store(false, Ordering::Release);
                         shared.active_target.store(0, Ordering::Release);
@@ -449,11 +474,14 @@ fn worker(shared: Arc<Shared>, factory: EngineFactory) {
                         continue;
                     }
 
-                    let text = if engine.accepts_key(ch) {
-                        engine.type_key(ch)
+                    let input = if engine.accepts_character(ch) {
+                        RootInput::Character(ch)
+                    } else if ch == ' ' {
+                        RootInput::SpaceBoundary
                     } else {
-                        engine.decision_boundary(ch)
+                        RootInput::PunctuationBoundary(ch)
                     };
+                    let text = transition::apply(engine.as_mut(), input);
                     let remains_active = engine.history_active();
                     let ok = owned.as_mut().is_some_and(|range| {
                         range.replace(automation.as_ref(), clipboard.as_ref(), &text)
@@ -464,7 +492,7 @@ fn worker(shared: Arc<Shared>, factory: EngineFactory) {
                         // suppressed by the hook, so replaying it here can duplicate one
                         // keystroke into two. Drop ownership and let the next physical
                         // event start a fresh composition instead.
-                        engine.reset();
+                        let _ = engine.dispatch(RootInput::Lifecycle(LifecycleEvent::Reset));
                         owned = None;
                         shared.active.store(false, Ordering::Release);
                         shared.active_target.store(0, Ordering::Release);
@@ -476,30 +504,31 @@ fn worker(shared: Arc<Shared>, factory: EngineFactory) {
                         shared.active_target.store(0, Ordering::Release);
                     }
                 }
-                EventKind::Backspace | EventKind::Escape => {
-                    if let Some(text) = transition::apply(engine.as_mut(), event.kind, None) {
-                        let ok = owned.as_mut().is_some_and(|range| {
-                            range.replace(automation.as_ref(), clipboard.as_ref(), &text)
-                        });
-                        if !ok {
-                            engine.reset();
-                            owned = None;
-                            shared.capture_enabled.store(false, Ordering::Release);
-                            shared.active.store(false, Ordering::Release);
-                            shared.active_target.store(0, Ordering::Release);
-                        } else if !engine.history_active() {
-                            owned = None;
-                            shared.active.store(false, Ordering::Release);
-                            shared.active_target.store(0, Ordering::Release);
-                        }
+                EventKind::CompositionControl => {
+                    let control = if event.vk as u32 == VK_BACK as u32 {
+                        CompositionControl::Backspace
+                    } else {
+                        CompositionControl::Escape
+                    };
+                    let text =
+                        transition::apply(engine.as_mut(), RootInput::CompositionControl(control));
+                    let ok = owned.as_mut().is_some_and(|range| {
+                        range.replace(automation.as_ref(), clipboard.as_ref(), &text)
+                    });
+                    if !ok {
+                        let _ = engine.dispatch(RootInput::Lifecycle(LifecycleEvent::Reset));
+                        owned = None;
+                        shared.capture_enabled.store(false, Ordering::Release);
+                        shared.active.store(false, Ordering::Release);
+                        shared.active_target.store(0, Ordering::Release);
+                    } else if !engine.history_active() {
+                        owned = None;
+                        shared.active.store(false, Ordering::Release);
+                        shared.active_target.store(0, Ordering::Release);
                     }
                 }
-                EventKind::FinalizeWithDelimiter | EventKind::RawBoundary => {
-                    let delimiter = (event.kind == EventKind::FinalizeWithDelimiter)
-                        .then(|| printable_char(event.vk as u32, event.modifiers))
-                        .flatten();
-                    let text = transition::apply(engine.as_mut(), event.kind, delimiter)
-                        .unwrap_or_default();
+                EventKind::RawBoundary => {
+                    let text = transition::apply(engine.as_mut(), RootInput::RawBoundary);
                     if let Some(range) = owned.as_mut() {
                         let _ = range.replace(automation.as_ref(), clipboard.as_ref(), &text);
                     }
@@ -507,14 +536,28 @@ fn worker(shared: Arc<Shared>, factory: EngineFactory) {
                     shared.active.store(false, Ordering::Release);
                     shared.active_target.store(0, Ordering::Release);
                 }
-                EventKind::NaturalBoundary | EventKind::MouseBoundary => {
-                    let _ = transition::apply(engine.as_mut(), event.kind, None);
+                EventKind::CaretMoveBoundary => {
+                    let cause = if event.vk == 0 {
+                        CaretMoveCause::Mouse
+                    } else {
+                        caret_cause(event.vk as u32)
+                    };
+                    let _ = transition::apply(engine.as_mut(), RootInput::CaretMoveBoundary(cause));
                     owned = None;
                     shared.active.store(false, Ordering::Release);
                     shared.active_target.store(0, Ordering::Release);
                 }
-                EventKind::ResetOnly => {
-                    transition::apply(engine.as_mut(), event.kind, None);
+                EventKind::ShortcutBoundary => {
+                    let _ = transition::apply(engine.as_mut(), RootInput::ShortcutBoundary);
+                    owned = None;
+                    shared.active.store(false, Ordering::Release);
+                    shared.active_target.store(0, Ordering::Release);
+                }
+                EventKind::Lifecycle => {
+                    let _ = transition::apply(
+                        engine.as_mut(),
+                        RootInput::Lifecycle(LifecycleEvent::Reset),
+                    );
                     owned = None;
                     shared.active.store(false, Ordering::Release);
                     shared.active_target.store(0, Ordering::Release);

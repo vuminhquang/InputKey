@@ -25,19 +25,35 @@ static char *take_core(size_t (*fn)(uint64_t,uint8_t*,size_t), uint64_t h) {
     return (char *)b;
 }
 
-static char *type_core(uint64_t h, const char *s) {
+typedef size_t (*InputKeyArgCommand)(
+    uint64_t, const uint8_t *, size_t, uint8_t *, size_t);
+
+static char *arg_core(InputKeyArgCommand fn, uint64_t h, const char *s) {
     uint8_t *b = g_malloc0(4096);
-    size_t n = inputkey_key_utf8(h, (const uint8_t *)s, strlen(s), b, 4096);
+    size_t n = fn(h, (const uint8_t *)s, strlen(s), b, 4096);
     if (n > 4095) n = 4095;
     return (char *)b;
 }
 
+static char *type_core(uint64_t h, const char *s) {
+    return arg_core(inputkey_character_utf8, h, s);
+}
+
 static char *boundary_core(uint64_t h, const char *s) {
-    uint8_t *b = g_malloc0(4096);
-    size_t n = inputkey_decision_boundary_utf8(
-        h, (const uint8_t *)s, strlen(s), b, 4096);
-    if (n > 4095) n = 4095;
-    return (char *)b;
+    if (strcmp(s, " ") == 0) return take_core(inputkey_space_boundary, h);
+    return arg_core(inputkey_punctuation_boundary_utf8, h, s);
+}
+
+static char *caret_core(uint64_t h, const char *cause) {
+    return arg_core(inputkey_caret_move_boundary_utf8, h, cause);
+}
+
+static char *control_core(uint64_t h, const char *control) {
+    return arg_core(inputkey_composition_control_utf8, h, control);
+}
+
+static char *lifecycle_core(uint64_t h, const char *event) {
+    return arg_core(inputkey_lifecycle_utf8, h, event);
 }
 
 static char *catalog_index_string(
@@ -82,9 +98,8 @@ static void commit_text_owned(InputKeyEngine *self, char *s) {
 static void commit_core(InputKeyEngine *self, gboolean keep_displayed) {
     if (!self->core || !inputkey_has_history(self->core)) return;
     char *s = keep_displayed
-        ? take_core(inputkey_natural_boundary, self->core)
-        : take_core(inputkey_finalize, self->core);
-    if (!keep_displayed) inputkey_reset(self->core);
+        ? caret_core(self->core, "other")
+        : lifecycle_core(self->core, "finalize");
     commit_text_owned(self, s);
 }
 
@@ -215,20 +230,35 @@ static void apply_settings(InputKeyEngine *self) {
     clear_preedit(self);
 }
 
+static const char *caret_cause(guint keyval) {
+    switch (keyval) {
+    case IBUS_Left: case IBUS_KP_Left: return "left";
+    case IBUS_Right: case IBUS_KP_Right: return "right";
+    case IBUS_Up: case IBUS_KP_Up: return "up";
+    case IBUS_Down: case IBUS_KP_Down: return "down";
+    case IBUS_Home: case IBUS_KP_Home: return "home";
+    case IBUS_End: case IBUS_KP_End: return "end";
+    case IBUS_Page_Up: case IBUS_KP_Page_Up: return "page_up";
+    case IBUS_Page_Down: case IBUS_KP_Page_Down: return "page_down";
+    case IBUS_Insert: case IBUS_KP_Insert: return "insert";
+    case IBUS_Delete: case IBUS_KP_Delete: return "delete";
+    case IBUS_Tab: return "tab";
+    case IBUS_Return: case IBUS_KP_Enter: return "enter";
+    default: return NULL;
+    }
+}
+
 static gboolean process_key_event(
     IBusEngine *engine, guint keyval, guint keycode, guint state) {
     (void)keycode;
     InputKeyEngine *self = (InputKeyEngine *)engine;
     if (state & IBUS_RELEASE_MASK) return FALSE;
 
-    switch (keyval) {
-    case IBUS_Left: case IBUS_Right: case IBUS_Up: case IBUS_Down:
-    case IBUS_Home: case IBUS_End: case IBUS_Page_Up: case IBUS_Page_Down:
-    case IBUS_Insert: case IBUS_Delete:
-    case IBUS_KP_Left: case IBUS_KP_Right: case IBUS_KP_Up: case IBUS_KP_Down:
-    case IBUS_KP_Home: case IBUS_KP_End: case IBUS_KP_Page_Up: case IBUS_KP_Page_Down:
-    case IBUS_KP_Insert: case IBUS_KP_Delete:
-        commit_core(self, TRUE);
+    const char *cause = caret_cause(keyval);
+    if (cause) {
+        if (inputkey_has_history(self->core)) {
+            commit_text_owned(self, caret_core(self->core, cause));
+        }
         return FALSE;
     }
 
@@ -238,30 +268,32 @@ static gboolean process_key_event(
                       IBUS_SUPER_MASK | IBUS_META_MASK | IBUS_HYPER_MASK));
     if (raw_boundary && inputkey_has_history(self->core)) {
         commit_text_owned(
-            self, take_core(inputkey_commit_raw_boundary, self->core));
+            self, take_core(inputkey_raw_boundary, self->core));
         return TRUE;
     }
 
-    if (state & (IBUS_CONTROL_MASK | IBUS_MOD1_MASK |
-                 IBUS_SUPER_MASK | IBUS_META_MASK | IBUS_HYPER_MASK)) {
-        commit_core(self, TRUE);
-        return FALSE;
-    }
-
-    if (keyval == IBUS_Tab || keyval == IBUS_Return || keyval == IBUS_KP_Enter) {
-        commit_core(self, TRUE);
+    gboolean ctrl = (state & IBUS_CONTROL_MASK) != 0;
+    gboolean alt = (state & IBUS_MOD1_MASK) != 0;
+    gboolean command_chord =
+        (state & (IBUS_CONTROL_MASK | IBUS_MOD1_MASK |
+                  IBUS_SUPER_MASK | IBUS_META_MASK | IBUS_HYPER_MASK))
+        && !(ctrl && alt);
+    if (command_chord) {
+        if (inputkey_has_history(self->core)) {
+            commit_text_owned(self, take_core(inputkey_shortcut_boundary, self->core));
+        }
         return FALSE;
     }
 
     if (keyval == IBUS_BackSpace) {
         if (!inputkey_has_history(self->core)) return FALSE;
-        update_preedit(self, take_core(inputkey_backspace, self->core));
+        update_preedit(self, control_core(self->core, "backspace"));
         return TRUE;
     }
 
     if (keyval == IBUS_Escape) {
         if (!inputkey_has_history(self->core)) return FALSE;
-        update_preedit(self, take_core(inputkey_escape, self->core));
+        update_preedit(self, control_core(self->core, "escape"));
         return TRUE;
     }
 
@@ -271,7 +303,7 @@ static gboolean process_key_event(
         gint n = g_unichar_to_utf8(uc, utf8);
         utf8[n] = 0;
 
-        if (inputkey_accepts_key_utf8(
+        if (inputkey_accepts_character_utf8(
                 self->core, (const uint8_t *)utf8, (size_t)n)) {
             update_preedit(self, type_core(self->core, utf8));
             return TRUE;
@@ -290,7 +322,9 @@ static gboolean process_key_event(
 static void property_activate(
     IBusEngine *engine, const gchar *prop_name, guint prop_state) {
     InputKeyEngine *self = (InputKeyEngine *)engine;
-    commit_core(self, TRUE);
+    if (inputkey_has_history(self->core)) {
+        commit_text_owned(self, lifecycle_core(self->core, "language_changed"));
+    }
 
     if (g_str_has_prefix(prop_name, "language:")) {
         const char *language = prop_name + strlen("language:");
@@ -312,7 +346,8 @@ static void property_activate(
 
 static void reset_engine(IBusEngine *engine) {
     InputKeyEngine *self = (InputKeyEngine *)engine;
-    inputkey_reset(self->core);
+    char *ignored = lifecycle_core(self->core, "reset");
+    g_free(ignored);
     clear_preedit(self);
 }
 
@@ -321,7 +356,12 @@ static void focus_in(IBusEngine *engine) {
 }
 
 static void focus_out(IBusEngine *engine) {
-    reset_engine(engine);
+    InputKeyEngine *self = (InputKeyEngine *)engine;
+    if (inputkey_has_history(self->core)) {
+        commit_text_owned(self, lifecycle_core(self->core, "focus_lost"));
+    } else {
+        clear_preedit(self);
+    }
 }
 
 static void enable_engine(IBusEngine *engine) {
@@ -329,7 +369,10 @@ static void enable_engine(IBusEngine *engine) {
 }
 
 static void disable_engine(IBusEngine *engine) {
-    commit_core((InputKeyEngine *)engine, TRUE);
+    InputKeyEngine *self = (InputKeyEngine *)engine;
+    if (inputkey_has_history(self->core)) {
+        commit_text_owned(self, lifecycle_core(self->core, "disabled"));
+    }
 }
 
 static void finalize_obj(GObject *obj) {

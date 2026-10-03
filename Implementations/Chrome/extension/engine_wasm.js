@@ -96,9 +96,9 @@
       }
     }
 
-    accepts(key) {
+    acceptsCharacter(character) {
       this._ensure();
-      return withUtf8(key, (p, n) => !!wasm.inputkey_accepts_key_utf8(this._id, p, n));
+      return withUtf8(character, (p, n) => !!wasm.inputkey_accepts_character_utf8(this._id, p, n));
     }
 
     get raw() {
@@ -113,54 +113,47 @@
       return output();
     }
 
-    type(key) {
+    character(character) {
       this._ensure();
-      return keyCall('inputkey_key_utf8', this._id, key);
+      return keyCall('inputkey_character_utf8', this._id, character);
     }
 
-    backspace() {
+    spaceBoundary() {
       this._ensure();
-      wasm.inputkey_backspace(this._id);
+      wasm.inputkey_space_boundary(this._id);
       return output();
     }
 
-    escape() {
+    punctuationBoundary(delimiter) {
       this._ensure();
-      wasm.inputkey_escape(this._id);
+      return keyCall('inputkey_punctuation_boundary_utf8', this._id, delimiter);
+    }
+
+    caretMoveBoundary(cause) {
+      this._ensure();
+      return keyCall('inputkey_caret_move_boundary_utf8', this._id, cause);
+    }
+
+    shortcutBoundary() {
+      this._ensure();
+      wasm.inputkey_shortcut_boundary(this._id);
       return output();
     }
 
-    finalize() {
+    compositionControl(control) {
       this._ensure();
-      wasm.inputkey_finalize(this._id);
+      return keyCall('inputkey_composition_control_utf8', this._id, control);
+    }
+
+    rawBoundary() {
+      this._ensure();
+      wasm.inputkey_raw_boundary(this._id);
       return output();
     }
 
-    decisionBoundary(delimiter) {
-      this._ensure();
-      return keyCall('inputkey_decision_boundary_utf8', this._id, delimiter);
-    }
-
-    naturalBoundary() {
-      this._ensure();
-      wasm.inputkey_natural_boundary(this._id);
-      return output();
-    }
-
-    mouseBoundary() {
-      this._ensure();
-      wasm.inputkey_mouse_boundary(this._id);
-      return output();
-    }
-
-    commitRawBoundary() {
-      this._ensure();
-      wasm.inputkey_commit_raw_boundary(this._id);
-      return output();
-    }
-
-    reset() {
-      if (this._id) wasm.inputkey_reset(this._id);
+    lifecycle(event) {
+      if (!this._id) return '';
+      return keyCall('inputkey_lifecycle_utf8', this._id, event);
     }
 
     destroy() {

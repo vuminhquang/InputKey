@@ -10,6 +10,8 @@
 #include "inputkey.h"
 
 typedef size_t (*InputKeyCommand)(uint64_t, uint8_t *, size_t);
+typedef size_t (*InputKeyArgumentCommand)(
+    uint64_t, const uint8_t *, size_t, uint8_t *, size_t);
 
 static NSRange InputKeyNoReplacementRange(void) {
     return NSMakeRange(NSNotFound, NSNotFound);
@@ -39,13 +41,13 @@ static NSString *InputKeyCatalogJSON(void) {
     return result ?: @"";
 }
 
-static NSString *InputKeyStringFromKey(uint64_t handle, NSString *key) {
-    NSData *data = [key dataUsingEncoding:NSUTF8StringEncoding];
-    const size_t required = inputkey_key_utf8(
-        handle, data.bytes, data.length, NULL, 0);
+static NSString *InputKeyStringFromArgument(
+    uint64_t handle, InputKeyArgumentCommand command, NSString *argument) {
+    NSData *data = [argument dataUsingEncoding:NSUTF8StringEncoding];
+    const size_t required = command(handle, data.bytes, data.length, NULL, 0);
     uint8_t *buffer = calloc(required + 1, sizeof(uint8_t));
     if (buffer == NULL) return @"";
-    inputkey_key_utf8(handle, data.bytes, data.length, buffer, required + 1);
+    command(handle, data.bytes, data.length, buffer, required + 1);
     NSString *result = [[NSString alloc] initWithBytes:buffer
                                                length:required
                                              encoding:NSUTF8StringEncoding];
@@ -53,24 +55,35 @@ static NSString *InputKeyStringFromKey(uint64_t handle, NSString *key) {
     return result ?: @"";
 }
 
-static NSString *InputKeyDecisionBoundary(uint64_t handle, NSString *delimiter) {
-    NSData *data = [delimiter dataUsingEncoding:NSUTF8StringEncoding];
-    const size_t required = inputkey_decision_boundary_utf8(
-        handle, data.bytes, data.length, NULL, 0);
-    uint8_t *buffer = calloc(required + 1, sizeof(uint8_t));
-    if (buffer == NULL) return @"";
-    inputkey_decision_boundary_utf8(
-        handle, data.bytes, data.length, buffer, required + 1);
-    NSString *result = [[NSString alloc] initWithBytes:buffer
-                                               length:required
-                                             encoding:NSUTF8StringEncoding];
-    free(buffer);
-    return result ?: @"";
+static NSString *InputKeyStringFromKey(uint64_t handle, NSString *key) {
+    return InputKeyStringFromArgument(handle, inputkey_character_utf8, key);
+}
+
+static NSString *InputKeyBoundary(uint64_t handle, NSString *delimiter) {
+    if ([delimiter isEqualToString:@" "]) {
+        return InputKeyStringFromCommand(handle, inputkey_space_boundary);
+    }
+    return InputKeyStringFromArgument(
+        handle, inputkey_punctuation_boundary_utf8, delimiter);
+}
+
+static NSString *InputKeyCaretBoundary(uint64_t handle, NSString *cause) {
+    return InputKeyStringFromArgument(
+        handle, inputkey_caret_move_boundary_utf8, cause);
+}
+
+static NSString *InputKeyControl(uint64_t handle, NSString *control) {
+    return InputKeyStringFromArgument(
+        handle, inputkey_composition_control_utf8, control);
+}
+
+static NSString *InputKeyLifecycle(uint64_t handle, NSString *event) {
+    return InputKeyStringFromArgument(handle, inputkey_lifecycle_utf8, event);
 }
 
 static BOOL InputKeyAcceptsKey(uint64_t handle, NSString *key) {
     NSData *data = [key dataUsingEncoding:NSUTF8StringEncoding];
-    return inputkey_accepts_key_utf8(handle, data.bytes, data.length) != 0;
+    return inputkey_accepts_character_utf8(handle, data.bytes, data.length) != 0;
 }
 
 @interface InputKeyInputController () {
@@ -178,10 +191,9 @@ static BOOL InputKeyAcceptsKey(uint64_t handle, NSString *key) {
 - (void)commitCurrentTokenFinalizing:(BOOL)finalize client:(id)sender {
     if (![self hasActiveToken]) return;
     NSString *text = finalize
-        ? InputKeyStringFromCommand(_core, inputkey_finalize)
-        : InputKeyStringFromCommand(_core, inputkey_natural_boundary);
+        ? InputKeyLifecycle(_core, @"finalize")
+        : InputKeyCaretBoundary(_core, @"other");
     [self commitText:text client:sender];
-    if (finalize) inputkey_reset(_core);
 }
 
 - (BOOL)isNavigationKeyCode:(unsigned short)keyCode {
@@ -191,6 +203,23 @@ static BOOL InputKeyAcceptsKey(uint64_t handle, NSString *key) {
             return YES;
         default:
             return NO;
+    }
+}
+
+- (NSString *)caretCauseForKeyCode:(unsigned short)keyCode {
+    switch (keyCode) {
+        case 123: return @"left";
+        case 124: return @"right";
+        case 126: return @"up";
+        case 125: return @"down";
+        case 115: return @"home";
+        case 119: return @"end";
+        case 116: return @"page_up";
+        case 121: return @"page_down";
+        case 117: return @"delete";
+        case 48: return @"tab";
+        case 36: case 76: return @"enter";
+        default: return @"other";
     }
 }
 
@@ -204,7 +233,7 @@ static BOOL InputKeyAcceptsKey(uint64_t handle, NSString *key) {
     (void)flags;
     if (keepTracking != NULL) *keepTracking = NO;
     if (![self hasActiveToken]) return NO;
-    NSString *text = InputKeyStringFromCommand(_core, inputkey_mouse_boundary);
+    NSString *text = InputKeyCaretBoundary(_core, @"mouse");
     [self commitText:text client:sender];
     return NO;
 }
@@ -220,31 +249,37 @@ static BOOL InputKeyAcceptsKey(uint64_t handle, NSString *key) {
     const BOOL shift = (flags & NSEventModifierFlagShift) != 0;
 
     if (event.keyCode == 49 && shift && !control && !option && !command && [self hasActiveToken]) {
-        NSString *raw = InputKeyStringFromCommand(_core, inputkey_commit_raw_boundary);
+        NSString *raw = InputKeyStringFromCommand(_core, inputkey_raw_boundary);
         [self commitText:raw client:sender];
         return YES;
     }
 
-    if (control || option || command) {
-        [self commitCurrentTokenFinalizing:NO client:sender];
+    if (control || command) {
+        if ([self hasActiveToken]) {
+            [self commitText:InputKeyStringFromCommand(_core, inputkey_shortcut_boundary)
+                       client:sender];
+        }
         return NO;
     }
 
     if (event.keyCode == 51) {
         if (![self hasActiveToken]) return NO;
-        [self setMarkedText:InputKeyStringFromCommand(_core, inputkey_backspace) client:sender];
+        [self setMarkedText:InputKeyControl(_core, @"backspace") client:sender];
         return YES;
     }
 
     if (event.keyCode == 53) {
         if (![self hasActiveToken]) return NO;
-        [self setMarkedText:InputKeyStringFromCommand(_core, inputkey_escape) client:sender];
+        [self setMarkedText:InputKeyControl(_core, @"escape") client:sender];
         return YES;
     }
 
     if ([self isNavigationKeyCode:event.keyCode]
         || event.keyCode == 48 || event.keyCode == 36 || event.keyCode == 76) {
-        [self commitCurrentTokenFinalizing:NO client:sender];
+        if ([self hasActiveToken]) {
+            [self commitText:InputKeyCaretBoundary(
+                _core, [self caretCauseForKeyCode:event.keyCode]) client:sender];
+        }
         return NO;
     }
 
@@ -260,7 +295,7 @@ static BOOL InputKeyAcceptsKey(uint64_t handle, NSString *key) {
     }
 
     if ([self hasActiveToken]) {
-        [self commitText:InputKeyDecisionBoundary(_core, characters) client:sender];
+        [self commitText:InputKeyBoundary(_core, characters) client:sender];
         return YES;
     }
 
@@ -272,7 +307,9 @@ static BOOL InputKeyAcceptsKey(uint64_t handle, NSString *key) {
 }
 
 - (void)inputControllerWillClose {
-    if (_core != 0) inputkey_reset(_core);
+    if (_core != 0) {
+        (void)InputKeyLifecycle(_core, @"context_destroyed");
+    }
     [super inputControllerWillClose];
 }
 

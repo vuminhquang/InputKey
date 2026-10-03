@@ -59,6 +59,7 @@ mod windows_dll {
     #[cfg(test)]
     mod tests {
         use super::*;
+        use inputkey_core_abstractions::RootInput;
 
         #[test]
         fn tsf_factory_selects_french_language() {
@@ -69,8 +70,8 @@ mod windows_dll {
 
             let factory = engine_factory();
             let mut engine = factory(config);
-            assert_eq!(engine.type_key('e'), "e");
-            assert_eq!(engine.type_key('e'), "ê");
+            assert_eq!(engine.dispatch(RootInput::Character('e')), "e");
+            assert_eq!(engine.dispatch(RootInput::Character('e')), "ê");
         }
     }
 }

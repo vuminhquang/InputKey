@@ -49,12 +49,15 @@ Backspace restores the state before the cancel. A further repeated key is litera
 
 ## Ending a composition
 
-The root owns explicit lifecycle phases: `Idle`, `Composing`, `CorrectionBoundary`, `RawBoundary`, `NaturalBoundary`, `MouseBoundary`, and `FinalizeBoundary`. A boundary event first moves the root into its boundary state; that state then performs its commit policy and returns the root to `Idle`.
+The root classifies input into semantic events and enters the corresponding state before emitting a synchronous `RootTransition` to the active language FSM.
 
-Space enters `CorrectionBoundary` once, lets the active language perform its optional correction, then finalizes and inserts a normal space. Punctuation uses `FinalizeBoundary` without correction. Enter, Tab, navigation keys, Delete, and Insert enter `NaturalBoundary`, commit the currently displayed text, return to `Idle`, and let the same physical key continue to the application.
+`SpaceBoundary` and `PunctuationBoundary` are distinct states because their causes and delimiters are different. They intentionally share the same language boundary policy: Vietnamese may perform its correction pass for either event, then the root appends the original delimiter. Thus `dduwocj ` and `dduwocj.` both resolve to `được` before their delimiter is emitted.
 
-A pointer/caret relocation enters the separate `MouseBoundary` state before the default pointer action changes the caret or selection. `MouseBoundary` and `NaturalBoundary` are different semantic states, but both call the root's private displayed-text commit-and-reset primitive. For example, if `dd` displays `đ`, clicking elsewhere first leaves `đ` committed at the old caret and only then relocates the caret.
+Mouse clicks and Enter/Tab/navigation/Delete/Insert all enter `CaretMoveBoundary`; the `cause` distinguishes Mouse, Enter, Left, and so on. The language commits the displayed text and ends composition before the original caret-moving event continues.
 
-Shift+Space enters `RawBoundary`, commits only the token's physical keystream, returns to `Idle`, and consumes the Space keystroke. For example, `refer` may display `rể`, while Shift+Space commits `refer`. Escape restores the literal token in-place and continued typing stays literal until the next boundary.
+Ctrl/Alt/Meta command chords enter `ShortcutBoundary`, commit displayed composition, and continue to the application unchanged. AltGraph is excluded from shortcut classification. Backspace/Escape are `CompositionControl` events. Shift+Space enters `RawBoundary`, commits the physical keystream, and consumes the Space key. Focus/context/enable/language changes are `Lifecycle` events.
+
+Language packs do not expose separate key/backspace/finalize/correction operations to the root. They keep their own language FSM internally and consume the single RootTransition stream.
+
 
 Only one input method should own a field at a time. When the browser extension owns composition in a remote or WSLg browser, disable any second IME for that same field to avoid double conversion.

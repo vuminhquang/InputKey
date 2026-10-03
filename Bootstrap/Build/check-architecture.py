@@ -134,21 +134,63 @@ for role in ("Boundary", "CoreAbstractions", "Operators"):
 root_source = (ROOT / "Operators" / "src" / "root.rs").read_text(encoding="utf-8")
 core_source = (ROOT / "CoreAbstractions" / "src" / "lib.rs").read_text(encoding="utf-8")
 boundary_source = (ROOT / "Boundary" / "src" / "lib.rs").read_text(encoding="utf-8")
+
 for required in (
-    "RootPhase::CorrectionBoundary",
-    "RootPhase::RawBoundary",
-    "RootPhase::NaturalBoundary",
-    "RootPhase::MouseBoundary",
-    "commit_displayed_and_reset",
+    "RootInput::Character",
+    "RootInput::SpaceBoundary",
+    "RootInput::PunctuationBoundary",
+    "RootInput::CaretMoveBoundary",
+    "RootInput::ShortcutBoundary",
+    "RootInput::CompositionControl",
+    "RootInput::RawBoundary",
+    "RootInput::Lifecycle",
+    "self.phase = to;",
+    "self.child.on_transition(transition)",
 ):
     if required not in root_source:
-        errors.append(f"root FSM missing explicit boundary-state primitive: {required}")
-for required in ("NaturalBoundary", "MouseBoundary"):
-    if required not in core_source or required not in boundary_source:
-        errors.append(f"boundary protocol missing explicit root state/event: {required}")
-for forbidden in ("fn commit_displayed(&mut self)", "InputType::CommitDisplayed"):
-    if forbidden in root_source or forbidden in core_source or forbidden in boundary_source:
-        errors.append(f"obsolete direct displayed-commit API remains: {forbidden}")
+        errors.append(f"root FSM missing semantic transition primitive: {required}")
+
+for required in (
+    "pub enum RootInput",
+    "pub enum RootPhase",
+    "pub struct RootTransition",
+    "fn on_transition(&mut self, transition: RootTransition)",
+    "fn dispatch(&mut self, input: RootInput)",
+):
+    if required not in core_source:
+        errors.append(f"semantic root contract missing: {required}")
+
+for required in (
+    "Character",
+    "SpaceBoundary",
+    "PunctuationBoundary",
+    "CaretMoveBoundary",
+    "ShortcutBoundary",
+    "CompositionControl",
+    "RawBoundary",
+    "Lifecycle",
+):
+    if required not in boundary_source:
+        errors.append(f"public boundary protocol missing semantic event: {required}")
+
+phase_pos = root_source.find("self.phase = to;")
+emit_pos = root_source.find("self.child.on_transition(transition)")
+if phase_pos < 0 or emit_pos < 0 or phase_pos > emit_pos:
+    errors.append("root must enter the semantic state before emitting RootTransition")
+
+for forbidden in (
+    "NaturalBoundary",
+    "MouseBoundary",
+    "DecisionBoundary",
+    "CommitDisplayed",
+    "fn type_key(&mut self",
+    "fn backspace(&mut self",
+    "fn escape(&mut self",
+    "fn finalize(&mut self",
+    "fn correct_boundary(&mut self",
+):
+    if forbidden in core_source or forbidden in boundary_source:
+        errors.append(f"obsolete procedural root/plugin contract remains: {forbidden}")
 
 if errors:
     print("CONTRACT IS LAW! ARCHITECTURE VIOLATION DETECTED.")

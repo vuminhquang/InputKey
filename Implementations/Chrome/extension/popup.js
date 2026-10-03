@@ -161,21 +161,21 @@ chrome.storage.onChanged.addListener((_, area) => {
       !e.ctrlKey && !e.metaKey && !e.altKey && tester.raw
     ) {
       e.preventDefault();
-      const raw = tester.commitRawBoundary();
+      const raw = tester.rawBoundary();
       replaceOwned(testerRendered, raw);
       testerRendered = '';
       return;
     }
 
     if (e.ctrlKey || e.metaKey || e.altKey || e.isComposing) {
-      if (tester.raw) tester.naturalBoundary();
+      if (tester.raw) tester.shortcutBoundary();
       testerRendered = '';
       return;
     }
 
     if (e.key === 'Backspace' && tester.raw) {
       e.preventDefault();
-      const next = tester.backspace();
+      const next = tester.compositionControl('backspace');
       replaceOwned(testerRendered, next);
       testerRendered = next;
       return;
@@ -183,23 +183,26 @@ chrome.storage.onChanged.addListener((_, area) => {
 
     if (e.key === 'Escape' && tester.raw) {
       e.preventDefault();
-      const next = tester.escape();
+      const next = tester.compositionControl('escape');
       replaceOwned(testerRendered, next);
       testerRendered = next;
       return;
     }
 
     if (['ArrowLeft','ArrowRight','ArrowUp','ArrowDown','Home','End','PageUp','PageDown','Delete','Insert','Tab','Enter'].includes(e.key)) {
-      if (tester.raw) tester.naturalBoundary();
+      if (tester.raw) {
+        const cause = ({ArrowLeft:'left',ArrowRight:'right',ArrowUp:'up',ArrowDown:'down',Home:'home',End:'end',PageUp:'page_up',PageDown:'page_down',Delete:'delete',Insert:'insert',Tab:'tab',Enter:'enter'})[e.key] || 'other';
+        tester.caretMoveBoundary(cause);
+      }
       testerRendered = '';
       return;
     }
 
     if (e.key.length !== 1) return;
 
-    if (tester.accepts(e.key)) {
+    if (tester.acceptsCharacter(e.key)) {
       e.preventDefault();
-      const next = tester.type(e.key);
+      const next = tester.character(e.key);
       replaceOwned(testerRendered, next);
       testerRendered = next;
       return;
@@ -207,20 +210,20 @@ chrome.storage.onChanged.addListener((_, area) => {
 
     if (tester.raw) {
       e.preventDefault();
-      const committed = tester.decisionBoundary(e.key);
+      const committed = e.key === ' ' ? tester.spaceBoundary() : tester.punctuationBoundary(e.key);
       replaceOwned(testerRendered, committed);
       testerRendered = '';
     }
   });
 
   tryBox.addEventListener('mousedown', () => {
-    if (tester.raw) tester.mouseBoundary();
+    if (tester.raw) tester.caretMoveBoundary('mouse');
     testerRendered = '';
   });
 
   chrome.storage.onChanged.addListener((_, area) => {
     if (area === 'local') {
-      tester.reset();
+      tester.lifecycle('reset');
       testerRendered = '';
     }
   });

@@ -147,21 +147,21 @@ pub fn catalog_json(catalog: &dyn LanguageCatalogPort) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use inputkey_core_abstractions::TypingEnginePort;
+    use inputkey_core_abstractions::{RootInput, TypingEnginePort};
 
     #[test]
     fn root_switches_language_without_knowing_children() {
         let catalog = Catalog::bundled();
 
         let mut vi = create_machine(&catalog, "vi", default_config(&catalog, "vi")).unwrap();
-        vi.type_key('d');
-        vi.type_key('d');
-        assert_eq!(vi.decision_boundary(' '), "đ ");
+        vi.dispatch(RootInput::Character('d'));
+        vi.dispatch(RootInput::Character('d'));
+        assert_eq!(vi.dispatch(RootInput::SpaceBoundary), "đ ");
 
         let mut fr = create_machine(&catalog, "fr", default_config(&catalog, "fr")).unwrap();
-        fr.type_key('e');
-        fr.type_key('s');
-        assert_eq!(fr.decision_boundary(' '), "é ");
+        fr.dispatch(RootInput::Character('e'));
+        fr.dispatch(RootInput::Character('s'));
+        assert_eq!(fr.dispatch(RootInput::SpaceBoundary), "é ");
     }
 
     #[test]
@@ -170,12 +170,12 @@ mod tests {
         for language in ["vi", "fr"] {
             let mut machine =
                 create_machine(&catalog, language, default_config(&catalog, language)).unwrap();
-            machine.type_key('e');
+            machine.dispatch(RootInput::Character('e'));
             if language == "fr" {
-                machine.type_key('s');
+                machine.dispatch(RootInput::Character('s'));
             }
             let raw = machine.raw();
-            assert_eq!(machine.commit_raw_boundary(), raw);
+            assert_eq!(machine.dispatch(RootInput::RawBoundary), raw);
             assert!(!machine.history_active());
         }
     }

@@ -1,19 +1,17 @@
 //! Boundary protocol declarations and DTOs. No executable behavior lives here.
 
-pub const PROTOCOL_VERSION: u32 = 8;
+pub const PROTOCOL_VERSION: u32 = 9;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum InputType {
-    Key,
-    Backspace,
-    Escape,
-    Finalize,
-    DecisionBoundary,
-    CommitBoundary,
-    NaturalBoundary,
-    MouseBoundary,
-    CommitRawBoundary,
-    Reset,
+    Character,
+    SpaceBoundary,
+    PunctuationBoundary,
+    CaretMoveBoundary,
+    ShortcutBoundary,
+    CompositionControl,
+    RawBoundary,
+    Lifecycle,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]

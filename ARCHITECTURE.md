@@ -29,18 +29,19 @@ InputKey uses one language-independent root composition machine across browser a
 
 ## Engine features
 
-- Telex
-- Simple Telex
-- VNI
-- tone and vowel-shape handling
-- repeat-to-cancel
-- English collision recovery
-- Backspace, Escape, finalize, reset, and replay
-- one logical input event per FSM transition
-- root-owned explicit phases: Idle, Composing, CorrectionBoundary, RawBoundary, NaturalBoundary, MouseBoundary, and FinalizeBoundary
-- root-owned Space correction phase with optional language-specific correction rules
-- separate keyboard-natural and mouse/caret boundary states that share only a private displayed-text commit policy
-- one-shot raw-key boundary; punctuation/finalize do not invoke Space correction
+- one language-independent root FSM for semantic input and lifecycle
+- semantic root states: Idle, Composing, SpaceBoundary, PunctuationBoundary, CaretMoveBoundary, ShortcutBoundary, CompositionControl, RawBoundary, and Lifecycle
+- the root enters a state before synchronously emitting `RootTransition` to the active language machine
+- one Root-to-language contract: `accepts_character`, `on_transition`, and `state`
+- language-specific FSMs remain inside each language pack; the root does not know Vietnamese/French transformation rules
+- Space and punctuation are separate root states but may share the same language boundary policy
+- mouse and navigation inputs share `CaretMoveBoundary` while preserving the original cause
+- command chords use `ShortcutBoundary`; AltGraph remains character input
+- Backspace/Escape are composition-control events
+- Shift+Space is a one-shot raw boundary
+- native dynamic language packs use transition-only ABI v3; the public C/WASM semantic ABI is v4
+- Telex, Simple Telex, VNI, tone/vowel-shape handling, repeat-to-cancel, English collision recovery, and replay remain language/runtime features
+
 
 ## Platform targets
 

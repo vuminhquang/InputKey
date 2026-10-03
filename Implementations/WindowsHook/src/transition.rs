@@ -1,103 +1,88 @@
-use crate::EventKind;
-use inputkey_core_abstractions::TypingEnginePort;
+use inputkey_core_abstractions::{RootInput, TypingEnginePort};
 
-pub fn apply(
-    engine: &mut dyn TypingEnginePort,
-    kind: EventKind,
-    key: Option<char>,
-) -> Option<String> {
-    match kind {
-        EventKind::TypeChar => key.map(|c| engine.type_key(c)),
-        EventKind::Backspace => Some(engine.backspace()),
-        EventKind::Escape => Some(engine.escape()),
-        EventKind::RawBoundary => Some(engine.commit_raw_boundary()),
-        EventKind::FinalizeWithDelimiter => {
-            key.map(|delimiter| engine.decision_boundary(delimiter))
-        }
-        EventKind::NaturalBoundary => Some(engine.natural_boundary()),
-        EventKind::MouseBoundary => Some(engine.mouse_boundary()),
-        EventKind::ResetOnly => {
-            engine.reset();
-            None
-        }
-        EventKind::Pass => None,
-    }
+pub fn apply(engine: &mut dyn TypingEnginePort, input: RootInput) -> String {
+    engine.dispatch(input)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use inputkey_core_abstractions::{CaretMoveCause, CompositionControl, EngineState, RootPhase};
 
     struct Fake {
         value: String,
     }
 
     impl TypingEnginePort for Fake {
-        fn accepts_key(&self, key: char) -> bool {
-            key.is_ascii_alphabetic()
+        fn accepts_character(&self, character: char) -> bool {
+            character.is_ascii_alphabetic()
         }
-        fn type_key(&mut self, key: char) -> String {
-            self.value.push(key);
-            self.value.clone()
+
+        fn dispatch(&mut self, input: RootInput) -> String {
+            match input {
+                RootInput::Character(character) => {
+                    self.value.push(character);
+                    self.value.clone()
+                }
+                RootInput::CompositionControl(CompositionControl::Backspace) => {
+                    self.value.pop();
+                    self.value.clone()
+                }
+                RootInput::CompositionControl(CompositionControl::Escape) => {
+                    self.value.clear();
+                    String::new()
+                }
+                RootInput::SpaceBoundary => {
+                    let mut value = std::mem::take(&mut self.value);
+                    value.push(' ');
+                    value
+                }
+                RootInput::PunctuationBoundary(delimiter) => {
+                    let mut value = std::mem::take(&mut self.value);
+                    value.push(delimiter);
+                    value
+                }
+                RootInput::CaretMoveBoundary(_)
+                | RootInput::ShortcutBoundary
+                | RootInput::RawBoundary => std::mem::take(&mut self.value),
+                RootInput::Lifecycle(_) => {
+                    self.value.clear();
+                    String::new()
+                }
+            }
         }
-        fn backspace(&mut self) -> String {
-            self.value.pop();
-            self.value.clone()
-        }
-        fn escape(&mut self) -> String {
-            self.value.clear();
-            self.value.clone()
-        }
-        fn finalize(&mut self) -> String {
-            self.value.clone()
-        }
-        fn decision_boundary(&mut self, delimiter: char) -> String {
-            let mut value = std::mem::take(&mut self.value);
-            value.push(delimiter);
-            value
-        }
-        fn commit_boundary(&mut self) -> String {
-            std::mem::take(&mut self.value)
-        }
-        fn natural_boundary(&mut self) -> String {
-            std::mem::take(&mut self.value)
-        }
-        fn mouse_boundary(&mut self) -> String {
-            std::mem::take(&mut self.value)
-        }
-        fn commit_raw_boundary(&mut self) -> String {
-            std::mem::take(&mut self.value)
-        }
-        fn reset(&mut self) {
-            self.value.clear();
-        }
-        fn rendered(&self) -> String {
-            self.value.clone()
-        }
-        fn raw(&self) -> String {
-            self.value.clone()
-        }
-        fn history_active(&self) -> bool {
-            !self.value.is_empty()
+
+        fn state(&self) -> EngineState {
+            EngineState {
+                language_id: "fake".into(),
+                phase: if self.value.is_empty() {
+                    RootPhase::Idle
+                } else {
+                    RootPhase::Composing
+                },
+                raw: self.value.clone(),
+                rendered: self.value.clone(),
+                child_mode: "fake".into(),
+                child_phase: "fake".into(),
+            }
         }
     }
 
     #[test]
-    fn finalize_starts_the_next_token_cleanly() {
+    fn caret_move_ends_the_current_engine_session() {
         let mut engine = Fake {
             value: String::new(),
         };
-        apply(&mut engine, EventKind::TypeChar, Some('g'));
-        apply(&mut engine, EventKind::TypeChar, Some('o'));
+        apply(&mut engine, RootInput::Character('g'));
+        apply(&mut engine, RootInput::Character('o'));
         assert_eq!(
-            apply(&mut engine, EventKind::NaturalBoundary, None),
-            Some("go".into())
+            apply(
+                &mut engine,
+                RootInput::CaretMoveBoundary(CaretMoveCause::Left)
+            ),
+            "go"
         );
         assert!(!engine.history_active());
-        assert_eq!(
-            apply(&mut engine, EventKind::TypeChar, Some('n')),
-            Some("n".into())
-        );
     }
 
     #[test]
@@ -105,12 +90,9 @@ mod tests {
         let mut engine = Fake {
             value: String::new(),
         };
-        apply(&mut engine, EventKind::TypeChar, Some('a'));
-        apply(&mut engine, EventKind::TypeChar, Some('s'));
-        assert_eq!(
-            apply(&mut engine, EventKind::RawBoundary, None),
-            Some("as".into())
-        );
+        apply(&mut engine, RootInput::Character('a'));
+        apply(&mut engine, RootInput::Character('s'));
+        assert_eq!(apply(&mut engine, RootInput::RawBoundary), "as");
         assert!(!engine.history_active());
     }
 }

@@ -2,10 +2,109 @@ use std::sync::{Arc, Mutex};
 
 use inputkey_boundary::{InputEvent, InputType};
 use inputkey_core_abstractions::{
-    CoreEvent, CoreEventType, EventPublisher, LexiconPort, RootPhase,
+    CaretMoveCause, CompositionControl, CoreEvent, CoreEventType, EventPublisher,
+    LanguageMachinePort, LexiconPort, LifecycleEvent, RootInput, RootPhase, RootTransition,
 };
 use inputkey_language_vietnamese::{Machine, Mode, Options, Phase};
 use inputkey_operators::{replay, Machine as RootMachine, Session};
+
+fn phase_for(input: RootInput) -> RootPhase {
+    match input {
+        RootInput::Character(_) => RootPhase::Composing,
+        RootInput::SpaceBoundary => RootPhase::SpaceBoundary,
+        RootInput::PunctuationBoundary(_) => RootPhase::PunctuationBoundary,
+        RootInput::CaretMoveBoundary(_) => RootPhase::CaretMoveBoundary,
+        RootInput::ShortcutBoundary => RootPhase::ShortcutBoundary,
+        RootInput::CompositionControl(_) => RootPhase::CompositionControl,
+        RootInput::RawBoundary => RootPhase::RawBoundary,
+        RootInput::Lifecycle(_) => RootPhase::Lifecycle,
+    }
+}
+
+trait SemanticDriver {
+    fn semantic(&mut self, input: RootInput) -> String;
+    fn displayed(&self) -> String;
+    fn physical(&self) -> String;
+    fn active(&self) -> bool;
+
+    fn character(&mut self, character: char) -> String {
+        self.semantic(RootInput::Character(character))
+    }
+
+    fn space_boundary(&mut self) -> String {
+        self.semantic(RootInput::SpaceBoundary)
+    }
+
+    fn punctuation_boundary(&mut self, delimiter: char) -> String {
+        self.semantic(RootInput::PunctuationBoundary(delimiter))
+    }
+
+    fn caret_move(&mut self, cause: CaretMoveCause) -> String {
+        self.semantic(RootInput::CaretMoveBoundary(cause))
+    }
+
+    fn shortcut_boundary(&mut self) -> String {
+        self.semantic(RootInput::ShortcutBoundary)
+    }
+
+    fn control(&mut self, control: CompositionControl) -> String {
+        self.semantic(RootInput::CompositionControl(control))
+    }
+
+    fn raw_boundary(&mut self) -> String {
+        self.semantic(RootInput::RawBoundary)
+    }
+
+    fn lifecycle(&mut self, event: LifecycleEvent) -> String {
+        self.semantic(RootInput::Lifecycle(event))
+    }
+}
+
+impl SemanticDriver for RootMachine {
+    fn semantic(&mut self, input: RootInput) -> String {
+        self.dispatch(input)
+    }
+
+    fn displayed(&self) -> String {
+        self.state().rendered
+    }
+
+    fn physical(&self) -> String {
+        self.state().raw
+    }
+
+    fn active(&self) -> bool {
+        !self.state().raw.is_empty()
+    }
+}
+
+impl SemanticDriver for Machine {
+    fn semantic(&mut self, input: RootInput) -> String {
+        let from = if self.state().raw.is_empty() {
+            RootPhase::Idle
+        } else {
+            RootPhase::Composing
+        };
+        self.on_transition(RootTransition {
+            from,
+            to: phase_for(input),
+            input,
+        })
+        .text
+    }
+
+    fn displayed(&self) -> String {
+        self.state().rendered
+    }
+
+    fn physical(&self) -> String {
+        self.state().raw
+    }
+
+    fn active(&self) -> bool {
+        !self.state().raw.is_empty()
+    }
+}
 
 struct Words;
 
@@ -53,10 +152,10 @@ fn options(method: &str, simple_telex: bool, auto_restore: bool) -> Options {
 fn run(raw: &str, options: Options) -> String {
     let mut machine = root(options);
     for key in raw.chars() {
-        machine.type_key(key);
+        machine.character(key);
     }
     machine
-        .decision_boundary(' ')
+        .space_boundary()
         .strip_suffix(' ')
         .unwrap_or_default()
         .to_owned()
@@ -68,7 +167,7 @@ fn root(options: Options) -> RootMachine {
 
 fn key_event(key: char) -> InputEvent {
     InputEvent {
-        kind: InputType::Key,
+        kind: InputType::Character,
         key: key.to_string(),
         timestamp: 0,
     }
@@ -78,6 +177,14 @@ fn command_event(kind: InputType) -> InputEvent {
     InputEvent {
         kind,
         key: String::new(),
+        timestamp: 0,
+    }
+}
+
+fn named_event(kind: InputType, key: &str) -> InputEvent {
+    InputEvent {
+        kind,
+        key: key.to_owned(),
         timestamp: 0,
     }
 }
@@ -155,7 +262,7 @@ fn explicit_cancel_is_committed_before_english_recovery() {
     let mut machine = Machine::new(options("telex", false, true), Some(Box::new(Words)));
     let mut got = String::new();
     for key in "pass".chars() {
-        got = machine.type_key(key);
+        got = machine.character(key);
     }
     assert_eq!(got, "pas");
     let state = machine.state();
@@ -164,9 +271,9 @@ fn explicit_cancel_is_committed_before_english_recovery() {
     assert_eq!(state.phase, Phase::Dead);
     assert_eq!(state.fallback, "pas");
 
-    assert_eq!(machine.type_key('w'), "pasw");
+    assert_eq!(machine.character('w'), "pasw");
     for key in "ord".chars() {
-        got = machine.type_key(key);
+        got = machine.character(key);
     }
     assert_eq!(got, "password");
 }
@@ -193,7 +300,7 @@ fn cancel_returns_to_raw_typing_state() {
 
     let mut machine = Machine::new(options("telex", false, true), Some(Box::new(Words)));
     for key in "urr".chars() {
-        machine.type_key(key);
+        machine.character(key);
     }
     let state = machine.state();
     assert_eq!(state.raw, "urr");
@@ -202,7 +309,7 @@ fn cancel_returns_to_raw_typing_state() {
     assert_eq!(state.mode, Mode::RawLocked);
     assert_eq!(state.phase, Phase::Dead);
     assert!(!state.ambiguous);
-    assert_eq!(machine.type_key('l'), "url");
+    assert_eq!(machine.character('l'), "url");
 }
 
 #[test]
@@ -228,13 +335,19 @@ fn bracket_shortcut_repeat_cancel() {
             opts.cancel_preference = "english".to_owned();
             let mut machine = Machine::new(opts, Some(Box::new(Words)));
 
-            assert_eq!(machine.type_key(key), shaped);
-            assert_eq!(machine.type_key(key), cancelled);
-            assert_eq!(machine.finalize(), cancelled);
-            assert_eq!(machine.backspace(), shaped);
+            assert_eq!(machine.character(key), shaped);
+            assert_eq!(machine.character(key), cancelled);
+            assert_eq!(machine.control(CompositionControl::Backspace), shaped);
+            assert_eq!(machine.character(key), cancelled);
+            assert_eq!(machine.lifecycle(LifecycleEvent::Finalize), cancelled);
+            assert!(!machine.active());
+            assert_eq!(machine.control(CompositionControl::Backspace), "");
 
-            machine.type_key(key);
-            assert_eq!(machine.type_key(key), format!("{cancelled}{key}"));
+            let mut continued =
+                Machine::new(options("telex", false, auto_restore), Some(Box::new(Words)));
+            assert_eq!(continued.character(key), shaped);
+            assert_eq!(continued.character(key), cancelled);
+            assert_eq!(continued.character(key), format!("{cancelled}{key}"));
         }
     }
 }
@@ -253,7 +366,7 @@ fn event_observation_does_not_drive_fsm() {
     for key in "ddaya".chars() {
         session.handle(key_event(key));
     }
-    let output = session.handle(command_event(InputType::Finalize));
+    let output = session.handle(named_event(InputType::Lifecycle, "finalize"));
     assert_eq!(output.commit, "đây");
 
     let events = events.lock().expect("event lock");
@@ -266,7 +379,7 @@ fn event_observation_does_not_drive_fsm() {
 #[test]
 fn replay_is_deterministic() {
     let mut inputs: Vec<InputEvent> = "nuawx".chars().map(key_event).collect();
-    inputs.push(command_event(InputType::Finalize));
+    inputs.push(named_event(InputType::Lifecycle, "finalize"));
 
     let first = replay(root(options("telex", false, true)), &inputs, None);
     let second = replay(root(options("telex", false, true)), &inputs, None);
@@ -294,15 +407,38 @@ fn late_shape_cancel() {
             let mut machine =
                 Machine::new(options(method, false, auto_restore), Some(Box::new(Words)));
             for input in raw.chars() {
-                machine.type_key(input);
+                machine.character(input);
             }
-            assert_eq!(machine.rendered_text(), live, "{raw} auto={auto_restore}");
-            assert_eq!(machine.type_key(key), cancelled, "{raw} cancel");
-            assert_eq!(machine.finalize(), cancelled, "{raw} finalize");
-            assert_eq!(machine.backspace(), live, "{raw} undo");
-            machine.type_key(key);
+            assert_eq!(machine.displayed(), live, "{raw} auto={auto_restore}");
+            assert_eq!(machine.character(key), cancelled, "{raw} cancel");
             assert_eq!(
-                machine.type_key(key),
+                machine.control(CompositionControl::Backspace),
+                live,
+                "{raw} undo before boundary"
+            );
+            assert_eq!(machine.character(key), cancelled, "{raw} cancel again");
+            assert_eq!(
+                machine.lifecycle(LifecycleEvent::Finalize),
+                cancelled,
+                "{raw} finalize"
+            );
+            assert!(
+                !machine.active(),
+                "{raw} lifecycle boundary ends composition"
+            );
+
+            let mut continued =
+                Machine::new(options(method, false, auto_restore), Some(Box::new(Words)));
+            for input in raw.chars() {
+                continued.character(input);
+            }
+            assert_eq!(
+                continued.character(key),
+                cancelled,
+                "{raw} continuation cancel"
+            );
+            assert_eq!(
+                continued.character(key),
                 format!("{cancelled}{key}"),
                 "{raw} literal continuation"
             );
@@ -314,21 +450,21 @@ fn late_shape_cancel() {
 fn data_finalize_and_keep_displayed() {
     let mut machine = Machine::new(options("telex", false, true), None);
     for key in "data".chars() {
-        machine.type_key(key);
+        machine.character(key);
     }
-    assert_eq!(machine.finalize(), "data");
+    assert_eq!(machine.lifecycle(LifecycleEvent::Finalize), "data");
 
-    machine.reset();
+    machine.lifecycle(LifecycleEvent::Reset);
     for key in "data".chars() {
-        machine.type_key(key);
+        machine.character(key);
     }
-    let kept = machine.rendered_text().to_owned();
-    machine.reset();
+    let kept = machine.displayed().to_owned();
+    machine.lifecycle(LifecycleEvent::Reset);
 
     assert_eq!(kept, "dât");
-    assert_eq!(machine.finalize(), "");
-    assert!(!machine.has_history());
-    assert_eq!(machine.backspace(), "");
+    assert_eq!(machine.lifecycle(LifecycleEvent::Finalize), "");
+    assert!(!machine.active());
+    assert_eq!(machine.control(CompositionControl::Backspace), "");
 }
 
 #[test]
@@ -336,26 +472,38 @@ fn closed_only_vowels_restore_raw_at_word_boundary() {
     for (raw, live) in [("thaas", "th\u{1ea5}"), ("taws", "t\u{1eaf}")] {
         let mut machine = Machine::new(options("telex", false, true), None);
         for key in raw.chars() {
-            machine.type_key(key);
+            machine.character(key);
         }
-        assert_eq!(machine.rendered_text(), live, "{raw} live");
-        assert_eq!(machine.finalize(), raw, "{raw} finalize");
+        assert_eq!(machine.displayed(), live, "{raw} live");
+        assert_eq!(
+            machine.lifecycle(LifecycleEvent::Finalize),
+            raw,
+            "{raw} finalize"
+        );
     }
 
     for (raw, committed) in [("thaats", "th\u{1ea5}t"), ("tawts", "t\u{1eaf}t")] {
         let mut machine = Machine::new(options("telex", false, true), None);
         for key in raw.chars() {
-            machine.type_key(key);
+            machine.character(key);
         }
-        assert_eq!(machine.finalize(), committed, "{raw} valid closed syllable");
+        assert_eq!(
+            machine.lifecycle(LifecycleEvent::Finalize),
+            committed,
+            "{raw} valid closed syllable"
+        );
     }
 
     for (raw, committed) in [("aa", "\u{00e2}"), ("aw", "\u{0103}")] {
         let mut machine = Machine::new(options("telex", false, true), None);
         for key in raw.chars() {
-            machine.type_key(key);
+            machine.character(key);
         }
-        assert_eq!(machine.finalize(), committed, "{raw} standalone letter");
+        assert_eq!(
+            machine.lifecycle(LifecycleEvent::Finalize),
+            committed,
+            "{raw} standalone letter"
+        );
     }
 }
 
@@ -405,19 +553,19 @@ fn repeat_cancel_cannot_be_disabled() {
 fn raw_boundary_commits_physical_keys_and_ends_the_token() {
     let mut machine = Machine::new(options("telex", false, true), Some(Box::new(Words)));
     for key in "ddc".chars() {
-        machine.type_key(key);
+        machine.character(key);
     }
-    assert_eq!(machine.rendered_text(), "đc");
-    assert_eq!(machine.commit_raw_boundary(), "ddc");
+    assert_eq!(machine.displayed(), "đc");
+    assert_eq!(machine.raw_boundary(), "ddc");
     assert_eq!(machine.state().mode, Mode::Start);
-    assert_eq!(machine.raw_text(), "");
-    assert!(!machine.has_history());
+    assert_eq!(machine.physical(), "");
+    assert!(!machine.active());
 
     let mut session = Session::new(root(options("telex", false, true)), None);
     for key in "ddc".chars() {
         session.handle(key_event(key));
     }
-    let output = session.handle(command_event(InputType::CommitRawBoundary));
+    let output = session.handle(command_event(InputType::RawBoundary));
     assert_eq!(output.commit, "ddc");
     assert_eq!(output.rendered, "");
 }
@@ -426,37 +574,37 @@ fn raw_boundary_commits_physical_keys_and_ends_the_token() {
 fn correction_is_deferred_to_root_boundary() {
     let mut machine = root(options("telex", false, true));
     for key in "chueyern".chars() {
-        machine.type_key(key);
+        machine.character(key);
     }
-    assert_ne!(machine.rendered_text(), "chuyển");
-    assert_eq!(machine.decision_boundary(' '), "chuyển ");
+    assert_ne!(machine.displayed(), "chuyển");
+    assert_eq!(machine.space_boundary(), "chuyển ");
 }
 
 #[test]
-fn word_boundary_adjusts_but_natural_ime_boundary_preserves_visible_text() {
+fn correcting_boundary_adjusts_but_caret_move_preserves_visible_text() {
     let mut word_boundary = Machine::new(options("telex", false, true), Some(Box::new(Words)));
     for key in "data".chars() {
-        word_boundary.type_key(key);
+        word_boundary.character(key);
     }
-    assert_eq!(word_boundary.rendered_text(), "dât");
-    assert_eq!(word_boundary.commit_boundary(), "data");
+    assert_eq!(word_boundary.displayed(), "dât");
+    assert_eq!(word_boundary.lifecycle(LifecycleEvent::Finalize), "data");
     assert_eq!(word_boundary.state().mode, Mode::Start);
-    assert!(!word_boundary.has_history());
+    assert!(!word_boundary.active());
 
-    let mut natural_boundary = root(options("telex", false, true));
+    let mut caret_boundary = root(options("telex", false, true));
     for key in "data".chars() {
-        natural_boundary.type_key(key);
+        caret_boundary.character(key);
     }
-    assert_eq!(natural_boundary.rendered_text(), "dât");
-    assert_eq!(natural_boundary.natural_boundary(), "dât");
-    assert_eq!(natural_boundary.state().phase, RootPhase::Idle);
-    assert!(!natural_boundary.has_history());
+    assert_eq!(caret_boundary.displayed(), "dât");
+    assert_eq!(caret_boundary.caret_move(CaretMoveCause::Other), "dât");
+    assert_eq!(caret_boundary.state().phase, RootPhase::Idle);
+    assert!(!caret_boundary.active());
 
     let mut stroked_d = root(options("telex", false, true));
-    stroked_d.type_key('d');
-    stroked_d.type_key('d');
-    assert_eq!(stroked_d.rendered_text(), "đ");
-    assert_eq!(stroked_d.natural_boundary(), "đ");
+    stroked_d.character('d');
+    stroked_d.character('d');
+    assert_eq!(stroked_d.displayed(), "đ");
+    assert_eq!(stroked_d.caret_move(CaretMoveCause::Other), "đ");
     assert_eq!(stroked_d.state().phase, RootPhase::Idle);
 }
 
@@ -467,19 +615,23 @@ fn smart_correction_preserves_base_order_and_only_floats_modifiers() {
     for raw in ["mac", "macos", "mod"] {
         let mut machine = Machine::new(opts.clone(), Some(Box::new(Words)));
         for key in raw.chars() {
-            machine.type_key(key);
+            machine.character(key);
         }
-        assert_eq!(machine.rendered_text(), raw, "{raw} live");
-        assert_eq!(machine.finalize(), raw, "{raw} child finalize");
+        assert_eq!(machine.displayed(), raw, "{raw} live");
+        assert_eq!(
+            machine.lifecycle(LifecycleEvent::Finalize),
+            raw,
+            "{raw} child finalize"
+        );
         assert_eq!(run(raw, opts.clone()), raw, "{raw} root boundary");
     }
 
     let mut live = Machine::new(opts.clone(), Some(Box::new(Words)));
     for key in "thuongwf".chars() {
-        live.type_key(key);
+        live.character(key);
     }
-    assert_ne!(live.rendered_text(), "thường");
-    assert_ne!(live.finalize(), "thường");
+    assert_ne!(live.displayed(), "thường");
+    assert_ne!(live.lifecycle(LifecycleEvent::Finalize), "thường");
 
     for raw in ["thuongwf", "thuongfw", "thuowngf"] {
         assert_eq!(run(raw, opts.clone()), "thường", "{raw} root boundary");
@@ -494,21 +646,56 @@ fn oe_medial_rejects_labial_onsets_without_rejecting_valid_oe_syllables() {
 #[test]
 fn speculative_invalid_telex_rolls_back_on_the_next_key() {
     let mut machine = Machine::new(options("telex", false, true), Some(Box::new(Words)));
-    assert_eq!(machine.type_key('m'), "m");
-    assert_eq!(machine.type_key('o'), "mo");
-    assert_eq!(machine.type_key('r'), "mỏ");
-    assert_eq!(machine.type_key('e'), "mỏe");
+    assert_eq!(machine.character('m'), "m");
+    assert_eq!(machine.character('o'), "mo");
+    assert_eq!(machine.character('r'), "mỏ");
+    assert_eq!(machine.character('e'), "mỏe");
     assert_eq!(machine.state().phase, Phase::PendingValidation);
 
-    assert_eq!(machine.type_key('k'), "morek");
+    assert_eq!(machine.character('k'), "morek");
     assert_eq!(machine.state().mode, Mode::RawLocked);
 
     let mut space = root(options("telex", false, true));
     for key in "more".chars() {
-        space.type_key(key);
+        space.character(key);
     }
-    assert_eq!(space.rendered_text(), "mỏe");
-    assert_eq!(space.decision_boundary(' '), "more ");
+    assert_eq!(space.displayed(), "mỏe");
+    assert_eq!(space.space_boundary(), "more ");
+}
+
+#[test]
+fn space_and_punctuation_share_vietnamese_boundary_policy() {
+    let expected = "\u{0111}\u{01b0}\u{1ee3}c";
+
+    let mut space = root(options("telex", false, true));
+    for key in "dduwocj".chars() {
+        space.character(key);
+    }
+    assert_eq!(space.space_boundary(), format!("{expected} "));
+    assert_eq!(space.state().phase, RootPhase::Idle);
+
+    let mut punctuation = root(options("telex", false, true));
+    for key in "dduwocj".chars() {
+        punctuation.character(key);
+    }
+    assert_eq!(
+        punctuation.punctuation_boundary('.'),
+        format!("{expected}.")
+    );
+    assert_eq!(punctuation.state().phase, RootPhase::Idle);
+}
+
+#[test]
+fn shortcut_boundary_commits_displayed_without_correction() {
+    let mut machine = root(options("telex", false, true));
+    for key in "data".chars() {
+        machine.character(key);
+    }
+    let displayed = machine.displayed();
+    assert_ne!(displayed, "data");
+    assert_eq!(machine.shortcut_boundary(), displayed);
+    assert_eq!(machine.state().phase, RootPhase::Idle);
+    assert!(!machine.active());
 }
 
 #[test]

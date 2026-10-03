@@ -71,7 +71,7 @@
   function resetState(el) {
     const s = states.get(el);
     if (s) {
-      s.engine.reset();
+      s.engine.lifecycle('reset');
       s.lastRendered = '';
     }
   }
@@ -195,8 +195,24 @@
     showToast(settings.enabled ? `InputKey: ${String(settings.language || 'vi').toUpperCase()}` : 'InputKey: OFF');
   }
 
+  function isAltGraph(e) {
+    return !!e.getModifierState?.('AltGraph');
+  }
+
+  function isShortcut(e) {
+    return (e.ctrlKey || e.metaKey || e.altKey) && !isAltGraph(e);
+  }
+
   function isPrintableKey(e) {
-    return e.key && e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey;
+    return e.key && e.key.length === 1 && (!isShortcut(e));
+  }
+
+  function caretCause(key) {
+    return ({
+      ArrowLeft: 'left', ArrowRight: 'right', ArrowUp: 'up', ArrowDown: 'down',
+      Home: 'home', End: 'end', PageUp: 'page_up', PageDown: 'page_down',
+      Delete: 'delete', Insert: 'insert', Tab: 'tab', Enter: 'enter'
+    })[key] || 'other';
   }
 
 
@@ -227,15 +243,15 @@
       e.preventDefault();
       e.stopImmediatePropagation();
       const old = s.lastRendered;
-      const raw = s.engine.commitRawBoundary();
+      const raw = s.engine.rawBoundary();
       replaceBeforeCursor(el, old, raw);
       s.lastRendered = '';
       return;
     }
 
-    if (e.ctrlKey || e.metaKey || e.altKey) {
-      if (!['Shift', 'Control'].includes(e.key) && s.engine.raw) {
-        s.engine.naturalBoundary();
+    if (isShortcut(e)) {
+      if (!['Shift', 'Control', 'Alt', 'Meta'].includes(e.key) && s.engine.raw) {
+        s.engine.shortcutBoundary();
         s.lastRendered = '';
       }
       return;
@@ -244,7 +260,7 @@
     if (e.key === 'Escape' && s.engine.raw) {
       e.preventDefault();
       const old = s.lastRendered;
-      const raw = s.engine.escape();
+      const raw = s.engine.compositionControl('escape');
       replaceBeforeCursor(el, old, raw);
       s.lastRendered = raw;
       return;
@@ -254,23 +270,23 @@
       if (!s.engine.raw) return;
       e.preventDefault();
       const old = s.lastRendered;
-      const next = s.engine.backspace();
+      const next = s.engine.compositionControl('backspace');
       replaceBeforeCursor(el, old, next);
       s.lastRendered = next;
       return;
     }
 
     if (['ArrowLeft','ArrowRight','ArrowUp','ArrowDown','Home','End','PageUp','PageDown','Delete','Insert','Tab','Enter'].includes(e.key)) {
-      if (s.engine.raw) s.engine.naturalBoundary();
+      if (s.engine.raw) s.engine.caretMoveBoundary(caretCause(e.key));
       s.lastRendered = '';
       return;
     }
 
     if (isPrintableKey(e)) {
-      if (s.engine.accepts(e.key)) {
+      if (s.engine.acceptsCharacter(e.key)) {
         e.preventDefault();
         const old = s.lastRendered;
-        const next = s.engine.type(e.key);
+        const next = s.engine.character(e.key);
         replaceBeforeCursor(el, old, next);
         s.lastRendered = next;
         return;
@@ -279,7 +295,9 @@
       if (s.engine.raw) {
         e.preventDefault();
         const old = s.lastRendered;
-        const committed = s.engine.decisionBoundary(e.key);
+        const committed = e.key === ' '
+          ? s.engine.spaceBoundary()
+          : s.engine.punctuationBoundary(e.key);
         replaceBeforeCursor(el, old, committed);
         s.lastRendered = '';
       }
@@ -303,7 +321,7 @@
     const el = previous || current;
     if (!el) return;
     const s = states.get(el);
-    if (s?.engine.raw) s.engine.mouseBoundary();
+    if (s?.engine.raw) s.engine.caretMoveBoundary('mouse');
     if (s) s.lastRendered = '';
   }, true);
 

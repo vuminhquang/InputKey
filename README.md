@@ -15,16 +15,20 @@ InputKey is a Rust-first multilingual input method with one language-independent
 
 ## Composition boundaries
 
-InputKey follows normal IME boundary behavior instead of keeping a separate token mode. While a token is active:
+InputKey uses one semantic root state machine across every platform. Physical input is classified into `Character`, `SpaceBoundary`, `PunctuationBoundary`, `CaretMoveBoundary`, `ShortcutBoundary`, `CompositionControl`, `RawBoundary`, or `Lifecycle`. The root enters that state first, then synchronously emits a `RootTransition` to the active language machine.
 
-- **Space** enters the root correction boundary: the active language gets one optional correction pass, the token is finalized, and a normal space is inserted. **Punctuation** finalizes without invoking correction, then inserts the delimiter.
-- **Enter, Tab, arrows, Home/End, Page Up/Down, Delete, and Insert** enter the root `NaturalBoundary` state, commit exactly the text currently displayed, end composition, and let that same key continue to the application.
-- **Mouse/caret relocation** enters the separate root `MouseBoundary` state, commits the displayed text at the old caret, ends composition, and only then lets the pointer action move the caret or selection.
-- **Shift+Space** enters `RawBoundary`: it commits the physical keystroke sequence for the current token, consumes the Space keystroke, and ends composition.
+- **Character input** stays in composition and is interpreted by the selected language FSM.
+- **Space** enters `SpaceBoundary`; **punctuation** such as `. , ! ? ; :` enters the distinct `PunctuationBoundary`. They remain separate semantic states, but both ask the language FSM to resolve its word-boundary policy before the root emits the original delimiter. Vietnamese therefore applies the same correction policy to `dduwocj ` and `dduwocj.`.
+- **Mouse clicks, Enter, Tab, arrows, Home/End, Page Up/Down, Delete, and Insert** enter one `CaretMoveBoundary` state while retaining the original cause. The language commits the currently displayed composition, then the original caret-moving event continues to the application.
+- **Ctrl/Alt/Win command chords** enter `ShortcutBoundary`: the displayed composition is committed first, then the original shortcut continues unchanged. AltGraph is treated as character input, not as a shortcut.
+- **Backspace and Escape** are `CompositionControl` events.
+- **Shift+Space** enters `RawBoundary`: it commits the physical keystroke sequence for the current token and consumes the Space keystroke.
+- Focus loss, context destruction, disable, language changes, finalize, and reset are explicit **Lifecycle** events.
 
-For example, `dd` displays `đ`; pressing an arrow commits `đ` and then moves the caret. Clicking elsewhere first commits `đ` at its original caret before the click relocates the selection. `refer` may display `rể`; pressing Shift+Space commits `refer`.
+For example, if `dd` displays `đ`, Left Arrow commits `đ` before the caret moves; clicking elsewhere does the same through `CaretMoveBoundary(Mouse)`. `Ctrl+A` commits the displayed token before Select All runs. `refer` may display a transformed candidate, while Shift+Space commits the physical `refer`.
 
-The root owns explicit lifecycle phases: `Idle`, `Composing`, `CorrectionBoundary`, `RawBoundary`, `NaturalBoundary`, `MouseBoundary`, and `FinalizeBoundary`. `NaturalBoundary` and `MouseBoundary` are deliberately distinct states even though both use the same private displayed-text commit policy.
+The root owns semantic routing and lifecycle only. Vietnamese, French, and future language packs keep their own language-specific FSMs and receive `RootTransition` events through one transition entrypoint instead of operation-specific methods.
+
 
 ## Windows input paths
 
@@ -46,10 +50,10 @@ The shared engine supports:
 - repeat-to-cancel
 - English collision recovery
 - Backspace/Escape reconstruction
-- natural IME composition boundaries and one-shot Shift+Space raw escape
-- root-owned Space correction with optional language-specific correction rules, enabled by default for Vietnamese on Windows
+- semantic caret/shortcut/composition/lifecycle boundaries and one-shot Shift+Space raw escape
+- language-owned boundary correction triggered by both Space and punctuation boundaries
 
-At the Space boundary, the Vietnamese correction hook can recover modifier-order variants without inventing missing tone input, including `nhieue → nhiều`, `chueyern → chuyển`, and `dduocwj → được`. Live typing remains sequential; explicit repeat-cancel still happens immediately at the character event. Regression coverage also includes `pass → pas`, `passs → pass`, `password → password`, `urrl → url`, `assk → ask`, `affter → after`, `exxe → exe`, and `ajjax → ajax`.
+At Space or punctuation boundaries, the Vietnamese FSM can recover modifier-order variants without inventing missing tone input, including `nhieue → nhiều`, `chueyern → chuyển`, `dduocwj → được`, and `dduwocj → được`. Live typing remains sequential; explicit repeat-cancel still happens immediately at the character event. Regression coverage also includes `pass → pas`, `passs → pass`, `password → password`, `urrl → url`, `assk → ask`, `affter → after`, `exxe → exe`, and `ajjax → ajax`.
 
 ## Privacy
 

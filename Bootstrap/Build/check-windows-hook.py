@@ -86,10 +86,11 @@ for required in (
     "LLKHF_INJECTED",
     "may_support_text",
     "capture(target",
-    "FinalizeWithDelimiter",
     "WH_MOUSE_LL",
-    "MouseBoundary",
-    "NaturalBoundary",
+    "CaretMoveBoundary",
+    "ShortcutBoundary",
+    "CompositionControl",
+    "RawBoundary",
 ):
     if required not in hook:
         raise SystemExit(
@@ -197,10 +198,10 @@ for required in (
             + required
         )
 
-for required in ("decision_boundary", "natural_boundary", "mouse_boundary"):
+for required in ("RootInput", "engine.dispatch(input)"):
     if required not in transition:
         raise SystemExit(
-            "Windows compatibility check failed: boundary semantics bypass the root engine: "
+            "Windows compatibility check failed: semantic input bypasses root dispatch: "
             + required
         )
 
