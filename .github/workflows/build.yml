@@ -3,6 +3,7 @@ name: build
 on:
   push:
   pull_request:
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -14,7 +15,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@1.96.0
         with:
           components: rustfmt, clippy
           targets: wasm32-unknown-unknown
@@ -25,7 +26,7 @@ jobs:
           sudo apt-get install -y cmake pkg-config zip gcc g++ libibus-1.0-dev libfcitx5core-dev
 
       - name: Architecture
-        run: python Bootstrap/Build/check-architecture.py
+        run: python3 Bootstrap/Build/check-architecture.py
 
       - name: Rust format
         run: cargo fmt --all -- --check
@@ -36,23 +37,11 @@ jobs:
       - name: Rust clippy
         run: cargo clippy --workspace --all-targets -- -D warnings
 
-      - name: C ABI
-        run: cargo build --release -p inputkey-cabi
+      - name: Build Linux package
+        run: sh Bootstrap/Build/build-linux.sh
 
       - name: Linux shortcut parser
         run: sh Bootstrap/Build/test-linux-shortcut.sh
-
-      - name: Build Fcitx5 adapter
-        run: |
-          cmake -S Implementations/Linux/Fcitx5 -B target/fcitx5 \
-            -DINPUTKEY_NATIVE_LIB_DIR="$PWD/target/release"
-          cmake --build target/fcitx5 --parallel
-
-      - name: Build IBus adapter
-        run: |
-          cmake -S Implementations/Linux/IBus -B target/ibus \
-            -DINPUTKEY_NATIVE_LIB_DIR="$PWD/target/release"
-          cmake --build target/ibus --parallel
 
       - name: Build Chrome and Edge package
         run: sh Bootstrap/Build/build-chrome.sh
@@ -63,13 +52,19 @@ jobs:
           path: dist/chrome/InputKey-*.zip
           if-no-files-found: error
 
+      - uses: actions/upload-artifact@v4
+        with:
+          name: InputKey-Linux
+          path: dist/linux/InputKey-Linux-*.zip
+          if-no-files-found: error
+
   windows:
     name: Windows
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
 
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@1.96.0
         with:
           components: rustfmt, clippy
 
@@ -78,6 +73,9 @@ jobs:
 
       - name: Windows hot-path contract
         run: python Bootstrap/Build/check-windows-hook.py
+
+      - name: Windows TSF contract
+        run: python Bootstrap/Build/check-windows-tsf.py
 
       - name: Rust format
         run: cargo fmt --all -- --check
@@ -105,7 +103,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: InputKey-Windows
-          path: dist/windows/**
+          path: dist/InputKey-Windows-*.zip
           if-no-files-found: error
 
   macos:
@@ -114,7 +112,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@1.96.0
         with:
           components: rustfmt, clippy
 
@@ -164,6 +162,11 @@ jobs:
 
       - uses: actions/download-artifact@v4
         with:
+          name: InputKey-Linux
+          path: release/linux
+
+      - uses: actions/download-artifact@v4
+        with:
           name: InputKey-Windows
           path: release/windows
 
@@ -179,11 +182,9 @@ jobs:
           VERSION="${GITHUB_REF_NAME#v}"
           mkdir -p release/out
           cp "release/chromium/InputKey-$VERSION.zip" "release/out/InputKey-Chromium-$VERSION.zip"
+          cp "release/linux/InputKey-Linux-x86_64-$VERSION.zip" "release/out/InputKey-Linux-x86_64-$VERSION.zip"
+          cp "release/windows/InputKey-Windows-$VERSION.zip" "release/out/InputKey-Windows-$VERSION.zip"
           cp "release/macos/InputKey-macOS-$VERSION.zip" "release/out/InputKey-macOS-$VERSION.zip"
-          (
-            cd release/windows
-            zip -qr "../out/InputKey-Windows-$VERSION.zip" .
-          )
 
       - name: Publish GitHub Release
         env:
@@ -192,8 +193,6 @@ jobs:
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
           gh release create "$GITHUB_REF_NAME" \
-            "release/out/InputKey-Chromium-$VERSION.zip" \
-            "release/out/InputKey-Windows-$VERSION.zip" \
-            "release/out/InputKey-macOS-$VERSION.zip" \
+            release/out/*.zip \
             --title "InputKey $VERSION" \
             --generate-notes
