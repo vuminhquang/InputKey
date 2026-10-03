@@ -1,7 +1,9 @@
 #![cfg_attr(windows, windows_subsystem = "windows")]
 
+#[cfg(any(windows, test))]
 use std::path::PathBuf;
 
+#[cfg(any(windows, test))]
 fn exe_arg(args: &[String]) -> Option<PathBuf> {
     args.iter()
         .position(|arg| arg == "--exe")

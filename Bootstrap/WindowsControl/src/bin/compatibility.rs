@@ -1,12 +1,18 @@
 ﻿#![cfg_attr(windows, windows_subsystem = "windows")]
 
+#[cfg(windows)]
 use inputkey_core_abstractions::TypingEnginePort;
+#[cfg(windows)]
 use inputkey_runtime::{create_machine, Catalog};
+#[cfg(windows)]
 use inputkey_windows_hook::{Config, EngineConfig, EngineFactory};
+#[cfg(windows)]
 use std::sync::Arc;
 
+#[cfg(windows)]
 const RELOAD_EVENT: &str = r"Local\InputKey.Compatibility.Reload";
 
+#[cfg(windows)]
 fn engine_factory(catalog: Arc<Catalog>) -> EngineFactory {
     Arc::new(move |config: EngineConfig| {
         let machine = create_machine(
