@@ -45,8 +45,10 @@ if "let _ = self.install_mouse_tracking(ec, mouse_sink);" not in service:
 if "ensure_mouse_tracking" in service:
     errors.append("WindowsTSF must not open a second post-key mouse-tracking edit session")
 
-if "InsertTextAtSelection(ec, TF_IAS_NO_DEFAULT_COMPOSITION, &[])" not in service:
-    errors.append("WindowsTSF must start composition before mutating application text")
+if "InsertTextAtSelection(ec, TF_IAS_NO_DEFAULT_COMPOSITION, &utf16)" not in service:
+    errors.append("WindowsTSF must insert initial text before starting its composition")
+if "return Ok(None);" not in service:
+    errors.append("WindowsTSF must retain key ownership when composition startup fails after insertion")
 if "let _ = self.set_caret_at_end(ec, &range);" not in service:
     errors.append("WindowsTSF caret placement after SetText must not release key ownership")
 if "let _ = composition.EndComposition(ec);" not in service:

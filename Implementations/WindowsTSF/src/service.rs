@@ -376,26 +376,35 @@ impl EditSession {
     fn start_composition_from_selection(
         &self,
         ec: u32,
-    ) -> Result<(ITfComposition, windows::Win32::UI::TextServices::ITfRange)> {
+        text: &str,
+    ) -> Result<Option<(ITfComposition, windows::Win32::UI::TextServices::ITfRange)>> {
         let insertion: ITfInsertAtSelection = self.context.cast()?;
-        // Establish an empty composition before mutating application text. If
-        // composition startup fails, the physical key can still safely pass
-        // through because no text has been inserted yet.
+        let utf16: Vec<u16> = text.encode_utf16().collect();
         let range =
-            unsafe { insertion.InsertTextAtSelection(ec, TF_IAS_NO_DEFAULT_COMPOSITION, &[])? };
+            unsafe { insertion.InsertTextAtSelection(ec, TF_IAS_NO_DEFAULT_COMPOSITION, &utf16)? };
         let context_composition: ITfContextComposition = self.context.cast()?;
         let sink: ITfCompositionSink = CompositionSink {
             control: Rc::clone(&self.control),
         }
         .into();
-        let composition = unsafe { context_composition.StartComposition(ec, &range, &sink)? };
+
+        let composition = match unsafe { context_composition.StartComposition(ec, &range, &sink) } {
+            Ok(composition) => composition,
+            Err(_) => {
+                // The text is already in the host. Keep this physical key owned,
+                // but drop logical composition so the next key can start fresh.
+                self.control.runtime.lock().expect("runtime lock").reset();
+                self.control.notify_composition_state(false);
+                return Ok(None);
+            }
+        };
         self.control
             .runtime
             .lock()
             .expect("runtime lock")
             .composition = Some(composition.clone());
         self.control.notify_composition_state(true);
-        Ok((composition, range))
+        Ok(Some((composition, range)))
     }
 
     fn install_mouse_tracking(&self, ec: u32, sink: &ITfMouseSink) -> Result<()> {
@@ -487,20 +496,21 @@ impl EditSession {
 
         let (composition, range) = if let Some(composition) = existing {
             let range = unsafe { composition.GetRange()? };
+            let utf16: Vec<u16> = text.encode_utf16().collect();
+            unsafe {
+                range.SetText(ec, 0, &utf16)?;
+            }
             (composition, range)
         } else {
-            self.start_composition_from_selection(ec)?
+            let Some(started) = self.start_composition_from_selection(ec, text)? else {
+                return Ok(());
+            };
+            started
         };
 
-        let utf16: Vec<u16> = text.encode_utf16().collect();
-        unsafe {
-            range.SetText(ec, 0, &utf16)?;
-        }
-
-        // SetText is the ownership boundary: from here on the application text
-        // has already been mutated by the IME. Auxiliary caret placement or
-        // native composition cleanup must never turn this handled key into a
-        // pass-through key, which would duplicate the physical character.
+        // Application text has already been mutated. Caret placement and
+        // native composition cleanup are auxiliary and cannot release the
+        // handled physical key back to the host.
         let _ = self.set_caret_at_end(ec, &range);
 
         if end || text.is_empty() {
