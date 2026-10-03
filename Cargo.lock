@@ -48,6 +48,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "inputkey-language-germanic"
+version = "5.2.7"
+dependencies = [
+ "inputkey-core-abstractions",
+]
+
+[[package]]
 name = "inputkey-language-pack-abi"
 version = "5.2.7"
 dependencies = [
@@ -56,10 +63,28 @@ dependencies = [
 ]
 
 [[package]]
+name = "inputkey-language-pack-danish"
+version = "5.2.7"
+dependencies = [
+ "inputkey-language-germanic",
+ "inputkey-language-pack-abi",
+ "inputkey-language-pack-native-abi",
+]
+
+[[package]]
 name = "inputkey-language-pack-french"
 version = "5.2.7"
 dependencies = [
  "inputkey-language-french",
+ "inputkey-language-pack-abi",
+ "inputkey-language-pack-native-abi",
+]
+
+[[package]]
+name = "inputkey-language-pack-german"
+version = "5.2.7"
+dependencies = [
+ "inputkey-language-germanic",
  "inputkey-language-pack-abi",
  "inputkey-language-pack-native-abi",
 ]
@@ -79,6 +104,15 @@ dependencies = [
 [[package]]
 name = "inputkey-language-pack-native-abi"
 version = "5.2.7"
+
+[[package]]
+name = "inputkey-language-pack-swedish"
+version = "5.2.7"
+dependencies = [
+ "inputkey-language-germanic",
+ "inputkey-language-pack-abi",
+ "inputkey-language-pack-native-abi",
+]
 
 [[package]]
 name = "inputkey-language-pack-vietnamese"
@@ -113,6 +147,7 @@ dependencies = [
  "inputkey-core-abstractions",
  "inputkey-english-bloom",
  "inputkey-language-french",
+ "inputkey-language-germanic",
  "inputkey-language-pack-loader",
  "inputkey-language-vietnamese",
  "inputkey-operators",

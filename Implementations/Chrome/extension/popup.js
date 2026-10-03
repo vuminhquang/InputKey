@@ -79,7 +79,13 @@ function renderHint(language) {
   }
   if (language.id === 'fr') {
     $('hint').innerHTML =
-      '<strong>French Telex:</strong> ee→ê · es→é · ef→è · aa/ii/oo/uu→â/î/ô/û · ex/ix/ux/yx→ë/ï/ü/ÿ · oe→œ · ae→æ · cc→ç';
+      '<strong>InputKey French Telex:</strong> ee→ê · es→é · ef→è · aa/ii/oo/uu→â/î/ô/û · ex/ix/ux/yx→ë/ï/ü/ÿ · oe→œ · ae→æ · cc→ç';
+  } else if (language.id === 'da') {
+    $('hint').innerHTML = '<strong>InputKey Danish Telex:</strong> ae→æ · oe→ø · aw→å';
+  } else if (language.id === 'sv') {
+    $('hint').innerHTML = '<strong>InputKey Swedish Telex:</strong> ae→ä · oe→ö · aw→å';
+  } else if (language.id === 'de') {
+    $('hint').innerHTML = '<strong>InputKey German Telex:</strong> aw→ä · ow→ö · uw→ü · sz→ß';
   } else {
     $('hint').innerHTML =
       '<strong>Vietnamese Telex:</strong> aa→â · aw→ă · dd→đ · s/f/r/x/j→dấu thanh<br><strong>VNI:</strong> 6/7/8/9→dấu chữ · 1–5→dấu thanh';

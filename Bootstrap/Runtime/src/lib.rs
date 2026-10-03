@@ -5,6 +5,7 @@ use inputkey_core_abstractions::{
 };
 use inputkey_english_bloom::EnglishBloom;
 use inputkey_language_french::FrenchPack;
+use inputkey_language_germanic::{DanishPack, GermanPack, SwedishPack};
 use inputkey_language_vietnamese::VietnamesePack;
 use inputkey_operators::Machine;
 use serde_json::{json, Value};
@@ -18,7 +19,13 @@ impl Catalog {
     pub fn bundled() -> Self {
         let vietnamese = VietnamesePack::new(Arc::new(|| Some(Box::new(EnglishBloom::new()))));
         Self {
-            packs: vec![Arc::new(vietnamese), Arc::new(FrenchPack)],
+            packs: vec![
+                Arc::new(vietnamese),
+                Arc::new(FrenchPack),
+                Arc::new(DanishPack),
+                Arc::new(SwedishPack),
+                Arc::new(GermanPack),
+            ],
         }
     }
 
@@ -162,12 +169,25 @@ mod tests {
         fr.dispatch(RootInput::Character('e'));
         fr.dispatch(RootInput::Character('s'));
         assert_eq!(fr.dispatch(RootInput::SpaceBoundary), "é ");
+
+        for (language, raw, expected) in [
+            ("da", "Koebenhavn", "København "),
+            ("sv", "saw", "så "),
+            ("de", "strasze", "straße "),
+        ] {
+            let mut machine =
+                create_machine(&catalog, language, default_config(&catalog, language)).unwrap();
+            for key in raw.chars() {
+                machine.dispatch(RootInput::Character(key));
+            }
+            assert_eq!(machine.dispatch(RootInput::SpaceBoundary), expected);
+        }
     }
 
     #[test]
     fn raw_boundary_is_identical_for_every_language() {
         let catalog = Catalog::bundled();
-        for language in ["vi", "fr"] {
+        for language in ["vi", "fr", "da", "sv", "de"] {
             let mut machine =
                 create_machine(&catalog, language, default_config(&catalog, language)).unwrap();
             machine.dispatch(RootInput::Character('e'));

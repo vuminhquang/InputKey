@@ -1,0 +1,14 @@
+[package]
+name = "inputkey-language-pack-german"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lib]
+name = "InputKeyLanguageGerman"
+crate-type = ["cdylib"]
+
+[dependencies]
+inputkey-language-pack-native-abi = { path = "../../../Implementations/LanguagePackNativeABI" }
+inputkey-language-pack-abi = { path = "../../LanguagePackABI" }
+inputkey-language-germanic = { path = "../../../Implementations/Languages/Germanic" }

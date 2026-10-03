@@ -17,7 +17,7 @@ try {
     cargo build --release --target-dir $Target -p inputkey-windows-tsf-bootstrap --lib --bin InputKeyTSFRegister
     if ($LASTEXITCODE) { throw "Windows TSF release build failed" }
 
-    cargo build --release --target-dir $Target -p inputkey-language-pack-vietnamese -p inputkey-language-pack-french
+    cargo build --release --target-dir $Target -p inputkey-language-pack-vietnamese -p inputkey-language-pack-french -p inputkey-language-pack-danish -p inputkey-language-pack-swedish -p inputkey-language-pack-german
     if ($LASTEXITCODE) { throw "Language pack release build failed" }
 
     if (Test-Path $Package) { Remove-Item $Package -Recurse -Force }
@@ -28,6 +28,9 @@ try {
     New-Item -ItemType Directory -Force $Languages | Out-Null
     Copy-Item (Join-Path $Target "release\InputKeyLanguageVietnamese.dll") $Languages
     Copy-Item (Join-Path $Target "release\InputKeyLanguageFrench.dll") $Languages
+    Copy-Item (Join-Path $Target "release\InputKeyLanguageDanish.dll") $Languages
+    Copy-Item (Join-Path $Target "release\InputKeyLanguageSwedish.dll") $Languages
+    Copy-Item (Join-Path $Target "release\InputKeyLanguageGerman.dll") $Languages
 
     Write-Host "Built $Package"
 } finally {

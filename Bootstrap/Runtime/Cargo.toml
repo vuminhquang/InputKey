@@ -9,6 +9,7 @@ inputkey-core-abstractions = { path = "../../CoreAbstractions" }
 inputkey-operators = { path = "../../Operators" }
 inputkey-language-vietnamese = { path = "../../Implementations/Languages/Vietnamese" }
 inputkey-language-french = { path = "../../Implementations/Languages/French" }
+inputkey-language-germanic = { path = "../../Implementations/Languages/Germanic" }
 inputkey-english-bloom = { path = "../../Implementations/EnglishBloom" }
 serde_json = "1"
 inputkey-boundary = { path = "../../Boundary" }

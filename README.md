@@ -4,7 +4,7 @@
 
 > Gõ tiếng Việt theo tốc độ tư duy của bạn.
 
-InputKey is a Rust-first multilingual input method with one language-independent root composition machine shared across browser, Windows, Linux, and macOS. Vietnamese is the default language; French Telex is bundled in 5.1.
+InputKey is a Rust-first multilingual input method with one language-independent root composition machine shared across browser, Windows, Linux, and macOS. Vietnamese is the default language; InputKey also bundles French, Danish, Swedish, and German Telex-style language packs.
 
 ## Platforms
 
@@ -27,7 +27,7 @@ InputKey uses one semantic root state machine across every platform. Physical in
 
 For example, if `dd` displays `đ`, Left Arrow commits `đ` before the caret moves; clicking elsewhere does the same through `CaretMoveBoundary(Mouse)`. `Ctrl+A` commits the displayed token before Select All runs. `refer` may display a transformed candidate, while Shift+Space commits the physical `refer`.
 
-The root owns semantic routing and lifecycle only. Vietnamese, French, and future language packs keep their own language-specific FSMs and receive `RootTransition` events through one transition entrypoint instead of operation-specific methods.
+The root owns semantic routing and lifecycle only. Vietnamese, French, Danish, Swedish, German, and future language packs keep their own language-specific FSMs and receive `RootTransition` events through one transition entrypoint instead of operation-specific methods.
 
 
 ## Windows input paths

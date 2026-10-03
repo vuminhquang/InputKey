@@ -202,6 +202,20 @@ test('French Telex uses the same Root engine contract', () => {
   engine.destroy();
 });
 
+test('Danish, Swedish, and German Telex use the same Root engine contract', () => {
+  const cases = [
+    ['da', 'Koebenhavn', 'København'],
+    ['sv', 'foer', 'för'],
+    ['de', 'gruwsze', 'grüße']
+  ];
+  for (const [language, raw, expected] of cases) {
+    const engine = new InputKey.Engine({ language, method: 'telex' });
+    for (const key of raw) engine.character(key);
+    assert.equal(engine.rendered, expected);
+    engine.destroy();
+  }
+});
+
 test('toggle shortcut parser supports modifier-only and keyed chords', () => {
   assert.equal(InputKeyShortcut.normalize('control + shift'), 'Ctrl+Shift');
   assert.equal(InputKeyShortcut.normalize('Alt+z'), 'Alt+Z');

@@ -46,7 +46,10 @@ try {
         (Join-Path $Stage "InputKeyTSFRegister.exe"),
         (Join-Path $RuntimeSource "InputKeyTSF.dll"),
         (Join-Path $RuntimeSource "languages\InputKeyLanguageVietnamese.dll"),
-        (Join-Path $RuntimeSource "languages\InputKeyLanguageFrench.dll")
+        (Join-Path $RuntimeSource "languages\InputKeyLanguageFrench.dll"),
+        (Join-Path $RuntimeSource "languages\InputKeyLanguageDanish.dll"),
+        (Join-Path $RuntimeSource "languages\InputKeyLanguageSwedish.dll"),
+        (Join-Path $RuntimeSource "languages\InputKeyLanguageGerman.dll")
     )
     foreach ($Path in $Required) { if (-not (Test-Path $Path)) { throw "Package is missing $Path" } }
 

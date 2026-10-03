@@ -90,7 +90,8 @@ finally:
 buf = (ctypes.c_uint8 * 4096)()
 n = lib.inputkey_catalog_json(buf, len(buf))
 catalog = bytes(buf[:n]).decode("utf-8")
-assert '"id":"vi"' in catalog and '"id":"fr"' in catalog
+for language_id in ("vi", "fr", "da", "sv", "de"):
+    assert f'"id":"{language_id}"' in catalog
 
 h = lib.inputkey_create_ex(b"fr", b"telex", b"{}")
 try:
@@ -103,5 +104,16 @@ try:
     assert type_text(h, "cc") == "ç"
 finally:
     lib.inputkey_destroy(h)
+
+for language, raw, expected in [
+    (b"da", "Koebenhavn", "København"),
+    (b"sv", "saw", "så"),
+    (b"de", "strasze", "straße"),
+]:
+    h = lib.inputkey_create_ex(language, b"telex", b"{}")
+    try:
+        assert type_text(h, raw) == expected
+    finally:
+        lib.inputkey_destroy(h)
 
 print("cabi-smoke=ok")
