@@ -1,0 +1,273 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#0b1020">
+  <meta name="description" content="InputKey is a free, open-source multilingual input method for Vietnamese and French. Type at the speed of thought.">
+  <meta property="og:title" content="InputKey — Type at the speed of thought.">
+  <meta property="og:description" content="A fast, local-first multilingual input method for Vietnamese and French.">
+  <meta property="og:type" content="website">
+  <meta property="og:image" content="assets/inputkey.png">
+  <title>InputKey — Type at the speed of thought.</title>
+  <link rel="icon" href="assets/inputkey.png">
+  <link rel="stylesheet" href="styles.css">
+  <script defer src="app.js"></script>
+</head>
+<body>
+  <div class="ambient ambient-one" aria-hidden="true"></div>
+  <div class="ambient ambient-two" aria-hidden="true"></div>
+
+  <header class="site-header">
+    <a class="brand" href="#top" aria-label="InputKey home">
+      <img src="assets/inputkey.png" alt="" width="36" height="36">
+      <span>InputKey</span>
+    </a>
+    <nav aria-label="Primary navigation">
+      <a href="#why">Why InputKey</a>
+      <a href="#vietnamese">Tiếng Việt</a>
+      <a href="#french">Français</a>
+      <a href="#download">Download</a>
+    </nav>
+    <a class="ghost-button" href="https://github.com/vuminhquang/InputKey">GitHub ↗</a>
+  </header>
+
+  <main id="top">
+    <section class="hero section-shell">
+      <div class="hero-copy">
+        <div class="eyebrow">Free · Open source · Local-first</div>
+        <h1>Type at the<br><span>speed of thought.</span></h1>
+        <p class="hero-lede">InputKey is a multilingual input method that gets out of your way. Type naturally, keep your rhythm, and let the language engine handle the composition.</p>
+        <div class="hero-actions">
+          <a class="primary-button" href="https://github.com/vuminhquang/InputKey/releases/latest">Download InputKey</a>
+          <a class="text-button" href="#learn">Learn how to type <span>↓</span></a>
+        </div>
+        <div class="platform-line" aria-label="Supported platforms">
+          <span>Windows</span><span>Chrome / Edge</span><span>Linux</span><span>macOS</span>
+        </div>
+      </div>
+
+      <div class="demo-card" aria-label="Typing demo">
+        <div class="demo-topbar">
+          <div class="window-dots" aria-hidden="true"><i></i><i></i><i></i></div>
+          <div class="language-switch" role="group" aria-label="Demo language">
+            <button class="demo-language active" data-demo-language="vi" type="button">VI</button>
+            <button class="demo-language" data-demo-language="fr" type="button">FR</button>
+          </div>
+        </div>
+        <div class="demo-stage">
+          <span class="demo-label" id="demo-label">Bạn gõ</span>
+          <div class="demo-input"><span id="demo-raw">dduwocj</span><span class="caret" aria-hidden="true"></span></div>
+          <div class="demo-arrow" aria-hidden="true">↓</div>
+          <span class="demo-label" id="demo-result-label">InputKey hiểu</span>
+          <div class="demo-output" id="demo-output">được</div>
+        </div>
+        <div class="demo-caption" id="demo-caption">Smart Correction resolves modifier order when you finish the word.</div>
+      </div>
+    </section>
+
+    <section id="why" class="section-shell feature-section">
+      <div class="section-heading">
+        <div class="eyebrow">Why InputKey</div>
+        <h2>Your language. Your casing.<br>Your typing rhythm.</h2>
+        <p>The input method should adapt to the way you type—not make you stop and think about the input method.</p>
+      </div>
+      <div class="feature-grid">
+        <article>
+          <span class="feature-number">01</span>
+          <h3>Correct at the boundary</h3>
+          <p>InputKey lets you finish the word first, then resolves supported modifier-order mistakes when you press Space or punctuation.</p>
+        </article>
+        <article>
+          <span class="feature-number">02</span>
+          <h3>Respect what you meant</h3>
+          <p>Backspace reconstructs composition state, shortcuts remain shortcuts, and raw escape lets you keep the physical keys when you need them.</p>
+        </article>
+        <article>
+          <span class="feature-number">03</span>
+          <h3>Runs locally</h3>
+          <p>Typing conversion happens on your device. Browser builds package the engine locally; native builds call the same Rust engine directly.</p>
+        </article>
+        <article>
+          <span class="feature-number">04</span>
+          <h3>One engine, many surfaces</h3>
+          <p>The same composition model powers Windows, Chromium browsers, Linux, and macOS, with language-specific packs on top.</p>
+        </article>
+      </div>
+    </section>
+
+    <section id="learn" class="learn-intro section-shell">
+      <div class="eyebrow">How to type</div>
+      <h2>Choose a language.<br>Keep typing.</h2>
+      <p>Each language pack keeps its own typing grammar and its own guide.</p>
+    </section>
+
+    <section id="vietnamese" class="language-section language-vi" lang="vi">
+      <div class="section-shell language-layout">
+        <div class="language-copy">
+          <div class="language-tag">Tiếng Việt</div>
+          <h2>Gõ tiếng Việt như bạn vẫn nghĩ.</h2>
+          <p class="language-lede">InputKey hỗ trợ <strong>Telex</strong>, <strong>VNI</strong> và tùy chọn <strong>Simple Telex</strong>. Bạn cứ gõ liền tay; bộ gõ xử lý dấu, hình dạng nguyên âm và Smart Correction ở cuối từ.</p>
+
+          <div class="tip-card">
+            <span class="tip-key">Shift + Space</span>
+            <div>
+              <strong>Cần giữ nguyên phím đã gõ?</strong>
+              <p>Dùng Shift + Space để chốt chuỗi phím vật lý thay vì kết quả chuyển đổi.</p>
+            </div>
+          </div>
+
+          <div class="smart-example">
+            <span>Gõ nhanh, sai thứ tự modifier vẫn được:</span>
+            <div><code>dduwocj</code><b>→</b><strong>được</strong></div>
+            <div><code>nhieue</code><b>→</b><strong>nhiều</strong></div>
+            <div><code>chueyern</code><b>→</b><strong>chuyển</strong></div>
+          </div>
+        </div>
+
+        <div class="language-guide">
+          <div class="guide-tabs" role="tablist" aria-label="Kiểu gõ tiếng Việt">
+            <button class="guide-tab active" type="button" role="tab" aria-selected="true" data-guide="telex">Telex</button>
+            <button class="guide-tab" type="button" role="tab" aria-selected="false" data-guide="vni">VNI</button>
+          </div>
+
+          <div class="guide-panel active" data-guide-panel="telex">
+            <h3>Telex</h3>
+            <div class="mapping-grid">
+              <div><code>aa</code><span>â</span></div>
+              <div><code>aw</code><span>ă</span></div>
+              <div><code>ee</code><span>ê</span></div>
+              <div><code>oo</code><span>ô</span></div>
+              <div><code>ow</code><span>ơ</span></div>
+              <div><code>uw</code><span>ư</span></div>
+              <div><code>dd</code><span>đ</span></div>
+            </div>
+            <h4>Dấu thanh</h4>
+            <div class="tone-row">
+              <span><kbd>s</kbd> sắc</span>
+              <span><kbd>f</kbd> huyền</span>
+              <span><kbd>r</kbd> hỏi</span>
+              <span><kbd>x</kbd> ngã</span>
+              <span><kbd>j</kbd> nặng</span>
+              <span><kbd>z</kbd> bỏ dấu</span>
+            </div>
+          </div>
+
+          <div class="guide-panel" data-guide-panel="vni">
+            <h3>VNI</h3>
+            <div class="mapping-grid">
+              <div><code>a6</code><span>â</span></div>
+              <div><code>a8</code><span>ă</span></div>
+              <div><code>e6</code><span>ê</span></div>
+              <div><code>o6</code><span>ô</span></div>
+              <div><code>o7</code><span>ơ</span></div>
+              <div><code>u7</code><span>ư</span></div>
+              <div><code>d9</code><span>đ</span></div>
+            </div>
+            <h4>Dấu thanh</h4>
+            <div class="tone-row">
+              <span><kbd>1</kbd> sắc</span>
+              <span><kbd>2</kbd> huyền</span>
+              <span><kbd>3</kbd> hỏi</span>
+              <span><kbd>4</kbd> ngã</span>
+              <span><kbd>5</kbd> nặng</span>
+              <span><kbd>0</kbd> bỏ dấu</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="french" class="language-section language-fr" lang="fr">
+      <div class="section-shell language-layout reverse">
+        <div class="language-copy">
+          <div class="language-tag">Français · InputKey French Telex</div>
+          <h2>Les accents, sans quitter votre rythme.</h2>
+          <p class="language-lede">InputKey French Telex applique une grammaire simple inspirée de Telex aux caractères français. Tout se tape avec des touches ASCII ordinaires.</p>
+
+          <div class="tip-card">
+            <span class="tip-key">Shift + Espace</span>
+            <div>
+              <strong>Vous voulez garder les touches brutes&nbsp;?</strong>
+              <p>Utilisez Shift + Espace pour valider la séquence physique sans transformation.</p>
+            </div>
+          </div>
+
+          <div class="smart-example">
+            <span>Quelques mots restent naturels à saisir&nbsp;:</span>
+            <div><code>garccon</code><b>→</b><strong>garçon</strong></div>
+            <div><code>l'amour</code><b>→</b><strong>l'amour</strong></div>
+            <div><code>qu'on</code><b>→</b><strong>qu'on</strong></div>
+          </div>
+        </div>
+
+        <div class="language-guide french-guide">
+          <h3>InputKey French Telex</h3>
+          <h4>Accents circonflexes</h4>
+          <div class="mapping-grid">
+            <div><code>aa</code><span>â</span></div>
+            <div><code>ee</code><span>ê</span></div>
+            <div><code>ii</code><span>î</span></div>
+            <div><code>oo</code><span>ô</span></div>
+            <div><code>uu</code><span>û</span></div>
+          </div>
+
+          <h4>Accents et tréma</h4>
+          <div class="mapping-grid">
+            <div><code>es</code><span>é</span></div>
+            <div><code>af</code><span>à</span></div>
+            <div><code>ef</code><span>è</span></div>
+            <div><code>uf</code><span>ù</span></div>
+            <div><code>ex</code><span>ë</span></div>
+            <div><code>ix</code><span>ï</span></div>
+            <div><code>ux</code><span>ü</span></div>
+            <div><code>yx</code><span>ÿ</span></div>
+          </div>
+
+          <h4>Caractères spéciaux</h4>
+          <div class="mapping-grid">
+            <div><code>cc</code><span>ç</span></div>
+            <div><code>oe</code><span>œ</span></div>
+            <div><code>ae</code><span>æ</span></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="download" class="download-section section-shell">
+      <div>
+        <div class="eyebrow">Get InputKey</div>
+        <h2>Ready when your thoughts are.</h2>
+        <p>Free software, released under GPL-2.0-or-later. Download the latest build or inspect every line of source.</p>
+      </div>
+      <div class="download-actions">
+        <a class="download-card primary-download" href="https://github.com/vuminhquang/InputKey/releases/latest">
+          <span>Latest release</span>
+          <strong>Download InputKey</strong>
+          <small>Windows · Chromium · Linux · macOS</small>
+          <b>↗</b>
+        </a>
+        <a class="download-card" href="https://github.com/vuminhquang/InputKey">
+          <span>Source code</span>
+          <strong>View on GitHub</strong>
+          <small>Build, inspect, contribute.</small>
+          <b>↗</b>
+        </a>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer section-shell">
+    <div class="brand footer-brand">
+      <img src="assets/inputkey.png" alt="" width="32" height="32">
+      <span>InputKey</span>
+    </div>
+    <p>Type at the speed of thought.</p>
+    <div class="footer-links">
+      <a href="https://github.com/vuminhquang/InputKey/blob/main/Implementations/Chrome/extension/PRIVACY.md">Privacy</a>
+      <a href="https://github.com/vuminhquang/InputKey/blob/main/LICENSE">License</a>
+      <a href="https://github.com/vuminhquang/InputKey/issues">Issues</a>
+    </div>
+  </footer>
+</body>
+</html>

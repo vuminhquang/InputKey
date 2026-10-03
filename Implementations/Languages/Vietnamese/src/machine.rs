@@ -1102,24 +1102,32 @@ fn ordered_telex_intent_matches(
     )
 }
 
-fn apply_input_case(raw: &str, rendered: &str) -> String {
-    let letters: Vec<char> = raw.chars().filter(|c| c.is_alphabetic()).collect();
-    if letters.is_empty() {
+fn apply_case_pattern(source: &str, rendered: &str) -> String {
+    let source_letters: Vec<char> = source.chars().filter(|c| c.is_alphabetic()).collect();
+    if source_letters.is_empty()
+        || source_letters.len() != rendered.chars().filter(|c| c.is_alphabetic()).count()
+    {
         return rendered.to_owned();
     }
-    if letters.iter().all(|c| c.is_uppercase()) {
-        return rendered.chars().flat_map(char::to_uppercase).collect();
-    }
-    if letters[0].is_uppercase() && letters.iter().skip(1).all(|c| c.is_lowercase()) {
-        let mut chars = rendered.chars();
-        let Some(first) = chars.next() else {
-            return String::new();
-        };
-        let mut out: String = first.to_uppercase().collect();
-        out.extend(chars);
-        return out;
-    }
-    rendered.to_owned()
+
+    let mut letter_index = 0usize;
+    rendered
+        .chars()
+        .map(|c| {
+            if !c.is_alphabetic() {
+                return c;
+            }
+            let source = source_letters[letter_index];
+            letter_index += 1;
+            if source.is_uppercase() {
+                upper_char(c)
+            } else if source.is_lowercase() {
+                lower_char(c)
+            } else {
+                c
+            }
+        })
+        .collect()
 }
 
 fn intent_preference(raw: &str, rendered: &str) -> isize {
@@ -1199,7 +1207,7 @@ fn resolve_telex_intent(raw: &str) -> Option<String> {
     {
         return None;
     }
-    Some(apply_input_case(raw, &best.rendered))
+    Some(best.rendered.clone())
 }
 
 #[derive(Clone, Copy)]
@@ -1958,6 +1966,7 @@ impl Machine {
 
         if self.options.smart_correction && self.options.method.eq_ignore_ascii_case("telex") {
             if let Some(corrected) = resolve_telex_intent(&self.raw) {
+                let corrected = apply_case_pattern(&self.rendered, &corrected);
                 if corrected != self.rendered {
                     return self.adopt_smart_candidate(corrected);
                 }
@@ -2114,6 +2123,30 @@ mod tests {
             modifiers: [0; 26],
             encoded_len: base.len(),
         }
+    }
+
+    #[test]
+    fn smart_correction_preserves_user_case_after_telex_modifiers() {
+        let mut machine = Machine::new(
+            Options {
+                method: "telex".to_owned(),
+                simple_telex: false,
+                auto_restore: true,
+                smart_correction: true,
+                double_cancel: true,
+                cancel_preference: "explicit".to_owned(),
+            },
+            None,
+        );
+
+        for key in "DDan".chars() {
+            machine.apply_key(key);
+        }
+
+        assert_eq!(machine.rendered, "Đan");
+        assert_eq!(machine.apply_correct_boundary(), "Đan");
+        assert_eq!(apply_case_pattern("ĐAN", "đan"), "ĐAN");
+        assert_eq!(apply_case_pattern("đAn", "đan"), "đAn");
     }
 
     #[test]
