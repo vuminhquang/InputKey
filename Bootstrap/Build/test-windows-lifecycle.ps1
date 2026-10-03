@@ -1,8 +1,22 @@
 $ErrorActionPreference = "Stop"
 $Root = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
-$Exe = Join-Path $Root "dist\windows\InputKey.exe"
+$Version = (Get-Content (Join-Path $Root "VERSION") -Raw).Trim()
+$Exe = Join-Path $Root "dist\InputKey-Windows-$Version\InputKey.exe"
 if (-not (Test-Path $Exe)) {
     throw "Missing $Exe. Run build-windows.ps1 first."
+}
+
+$restoreRunningInstance = $false
+Get-Process InputKey -ErrorAction SilentlyContinue | ForEach-Object {
+    try {
+        if ($_.Path -and ([IO.Path]::GetFullPath($_.Path) -eq [IO.Path]::GetFullPath($Exe))) {
+            $restoreRunningInstance = $true
+            Stop-Process -Id $_.Id -Force -ErrorAction Stop
+            $_.WaitForExit()
+        }
+    } catch {
+        throw "Could not stop existing canonical InputKey instance: $($_.Exception.Message)"
+    }
 }
 
 Add-Type @"
@@ -23,7 +37,7 @@ try {
     $window = [IntPtr]::Zero
     $deadline = [DateTime]::UtcNow.AddSeconds(8)
     while ([DateTime]::UtcNow -lt $deadline -and -not $process.HasExited) {
-        $window = [InputKeyWindowProbe]::FindWindow("InputKeyTrayWindow", "InputKey")
+        $window = [InputKeyWindowProbe]::FindWindow("InputKeyControlWindow", "InputKey")
         if ($window -ne [IntPtr]::Zero) { break }
         Start-Sleep -Milliseconds 50
         $process.Refresh()
@@ -33,11 +47,11 @@ try {
         throw "InputKey exited before the tray window became ready (exit code $($process.ExitCode))."
     }
     if ($window -eq [IntPtr]::Zero) {
-        throw "InputKeyTrayWindow did not appear."
+        throw "InputKeyControlWindow did not appear."
     }
 
     if (-not [InputKeyWindowProbe]::PostMessage($window, 0x0010, [IntPtr]::Zero, [IntPtr]::Zero)) {
-        throw "Could not send WM_CLOSE to InputKeyTrayWindow."
+        throw "Could not send WM_CLOSE to InputKeyControlWindow."
     }
 
     if (-not $process.WaitForExit(8000)) {
@@ -50,5 +64,8 @@ try {
 } finally {
     if (-not $process.HasExited) {
         Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
+    }
+    if ($restoreRunningInstance) {
+        Start-Process -FilePath $Exe | Out-Null
     }
 }
