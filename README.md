@@ -34,11 +34,11 @@ The root owns semantic routing and lifecycle only. Vietnamese, French, and futur
 
 Windows uses the TSF text service as the primary input path. Installing or updating the text service may require one UAC approval; normal typing and the tray app run as the current user. Applications that were already running when the text service was first installed may need to be restarted once so their TSF thread manager can load InputKey. This includes Windows Terminal if it was already open before InputKey's text service was installed.
 
-The packaged Windows runtime refreshes its per-user COM binding to the sibling `InputKeyTSF.dll` before TSF activation, so an update cannot keep pointing at an old build directory. The Windows package is therefore portable as one self-contained folder: moving the folder and starting `InputKey.exe` rebinds the same stable TSF identity to the DLL beside that executable. Applications that already loaded an older TSF DLL keep that in-process image until they are restarted once.
+The packaged Windows runtime keeps TSF binaries and native language packs under `runtime/<version>/`. Portable deployment stages and verifies the complete new runtime first, then switches the stable per-user TSF identity to that version; the explicit Install/Repair Text Service action can perform the same binding repair. Merely starting `InputKey.exe` does not rewrite the TSF binding. Already-open applications may keep their previously loaded version until they close, while newly opened applications load the newly bound version. Old runtime folders are not overwritten during that handoff.
 
-Closing the tray app gracefully turns InputKey off before exit but keeps the TSF registration intact for stability. `Remove Windows integration...` is the explicit cleanup path: it turns InputKey off, removes Start with Windows, unregisters the TSF profile/COM class, and exits without deleting the portable folder. The default on/off shortcut is `Ctrl+Shift`; it can be changed in Settings to combinations such as `Alt+Z` or `Ctrl+Shift+K`, or set to `Off`. `Ctrl+Alt` combinations are rejected so AltGr remains character input.
+Closing the tray app gracefully turns InputKey off before exit but keeps the TSF registration intact for stability. `Remove Windows integration...` is the explicit cleanup path: it turns InputKey off, removes InputKey's Start with Windows shortcut, unregisters the TSF profile/COM class, and exits without deleting the portable folder. Normal `InputKey.exe` startup never creates or repairs autorun state. The tray's `Start with Windows` checkbox is the explicit user action that invokes the separate `InputKeyStartup.exe` helper to create or remove the current user's Startup-folder shortcut. The default on/off shortcut is `Ctrl+Shift`; it can be changed in Settings to combinations such as `Alt+Z` or `Ctrl+Shift+K`, or set to `Off`. `Ctrl+Alt` combinations are rejected so AltGr remains character input.
 
-When TSF is unavailable for the focused target, InputKey probes target capabilities instead of routing by application name. It prefers owned native edit ranges, then UI Automation editable patterns, and uses an isolated synthetic transport only for compatible fallback surfaces such as Remote Desktop or custom Chromium render surfaces. Clipboard-backed paste remains a guarded secondary transport for supported native edits. Password and read-only fields are excluded, injected InputKey events are ignored by the hook, and clipboard restoration never overwrites a newer clipboard change made by another application.
+When TSF is unavailable for the focused target, the lifecycle-bound `InputKeyCompatibility.exe` helper probes target capabilities instead of routing by application name. The tray/control `InputKey.exe` does not host the global keyboard or mouse hooks itself. Compatibility prefers owned native edit ranges, then UI Automation editable patterns, and uses an isolated synthetic transport only for compatible fallback surfaces such as Remote Desktop or custom Chromium render surfaces. Clipboard-backed paste remains a guarded secondary transport for supported native edits. Password and read-only fields are excluded, injected InputKey events are ignored by the hook, and clipboard restoration never overwrites a newer clipboard change made by another application.
 
 ## Typing behavior
 
@@ -48,14 +48,14 @@ The shared engine supports:
 - VNI
 - tone placement and Vietnamese vowel shapes
 - `dd → đ`
-- `w` and bracket shortcuts
+- `w`-based Vietnamese shape input
 - repeat-to-cancel
 - English collision recovery
 - Backspace/Escape reconstruction
 - semantic caret/shortcut/composition/lifecycle boundaries and one-shot Shift+Space raw escape
 - language-owned boundary correction triggered by both Space and punctuation boundaries
 
-At Space or punctuation boundaries, the Vietnamese FSM can recover modifier-order variants without inventing missing tone input, including `nhieue → nhiều`, `chueyern → chuyển`, `dduocwj → được`, and `dduwocj → được`. Live typing remains sequential; explicit repeat-cancel still happens immediately at the character event. Regression coverage also includes `pass → pas`, `passs → pass`, `password → password`, `urrl → url`, `assk → ask`, `affter → after`, `exxe → exe`, and `ajjax → ajax`.
+At Space or punctuation boundaries, the Vietnamese FSM can recover modifier-order variants without inventing missing tone input, including `nhieue → nhiều`, `chueyern → chuyển`, `dduocwj → được`, and `dduwocj → được`. Boundary correction preserves the physical initial prefix: consonant onsets stay intact (`stop → stop`), while vowel-initial candidates remain in the same family (`a/ă/â`, `e/ê`, `o/ô/ơ`, `u/ư`, `i`, `y`). `[` and `]` are ordinary punctuation, not Vietnamese shape shortcuts. Live typing remains sequential; explicit repeat-cancel still happens immediately at the character event.
 
 ## Privacy
 

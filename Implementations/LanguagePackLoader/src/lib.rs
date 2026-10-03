@@ -335,10 +335,14 @@ fn module_dir() -> Option<PathBuf> {
 }
 
 pub fn default_search_dirs() -> Vec<PathBuf> {
-    let mut dirs = Vec::new();
     if let Some(raw) = std::env::var_os("INPUTKEY_LANGUAGE_PACK_DIR") {
-        dirs.extend(std::env::split_paths(&raw));
+        let mut dirs: Vec<PathBuf> = std::env::split_paths(&raw).collect();
+        dirs.sort();
+        dirs.dedup();
+        return dirs;
     }
+
+    let mut dirs = Vec::new();
     if let Some(module) = module_dir() {
         dirs.push(module.join("languages"));
         dirs.push(module.join("LanguagePacks"));

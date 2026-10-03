@@ -9,8 +9,8 @@ use windows::{
         System::{
             Com::{CoCreateInstance, CLSCTX_INPROC_SERVER},
             Registry::{
-                RegCloseKey, RegCreateKeyExW, RegDeleteTreeW, RegSetValueExW, HKEY,
-                HKEY_CURRENT_USER, KEY_WRITE, REG_OPTION_NON_VOLATILE, REG_SZ,
+                RegCloseKey, RegCreateKeyExW, RegDeleteTreeW, RegOpenKeyExW, RegSetValueExW, HKEY,
+                HKEY_CURRENT_USER, KEY_READ, KEY_WRITE, REG_OPTION_NON_VOLATILE, REG_SZ,
             },
         },
         UI::{
@@ -92,6 +92,30 @@ fn register_com_class(dll_path: &Path) -> Result<()> {
         let _ = RegCloseKey(key);
     }
     result
+}
+
+pub fn text_service_registered() -> bool {
+    let path = wide_nul(&format!(
+        r"Software\Classes\CLSID\{CLSID_INPUTKEY_STR}\InprocServer32"
+    ));
+    let mut key = HKEY::default();
+    let code = unsafe {
+        RegOpenKeyExW(
+            HKEY_CURRENT_USER,
+            PCWSTR(path.as_ptr()),
+            None,
+            KEY_READ,
+            &mut key,
+        )
+    };
+    if code == ERROR_SUCCESS {
+        unsafe {
+            let _ = RegCloseKey(key);
+        }
+        true
+    } else {
+        false
+    }
 }
 
 pub fn bind_text_service_dll(dll_path: &Path) -> Result<()> {

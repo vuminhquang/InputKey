@@ -24,7 +24,7 @@ mod service;
 #[cfg(windows)]
 pub use registration::{
     activate_text_service, bind_text_service_dll, disable_text_service, register_text_service,
-    text_service_active, text_service_available, unregister_text_service,
+    text_service_active, text_service_available, text_service_registered, unregister_text_service,
 };
 #[cfg(windows)]
 pub use service::{can_unload_now, class_factory};

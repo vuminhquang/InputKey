@@ -230,7 +230,31 @@ for required in (
             + required
         )
 
+main_control = (root / "Bootstrap/WindowsControl/src/main.rs").read_text(encoding="utf-8")
+compatibility_bootstrap = (root / "Bootstrap/WindowsControl/src/bin/compatibility.rs").read_text(encoding="utf-8")
+windows_build = (root / "Bootstrap/Build/build-windows.ps1").read_text(encoding="utf-8")
+
+if "inputkey_windows_hook::start" in main_control:
+    raise SystemExit(
+        "Windows compatibility check failed: InputKey.exe must not host the global compatibility hook in-process"
+    )
+for required in (
+    "inputkey_windows_hook::start",
+    "--parent",
+    "WaitForMultipleObjects",
+    "InputKey.Compatibility.Reload",
+):
+    if required not in compatibility_bootstrap:
+        raise SystemExit(
+            "Windows compatibility check failed: isolated compatibility process missing: "
+            + required
+        )
+if "InputKeyCompatibility.exe" not in windows_build:
+    raise SystemExit(
+        "Windows compatibility check failed: Windows package must include InputKeyCompatibility.exe"
+    )
+
 print(
     "Windows compatibility transport check passed: callback stays nonblocking; "
-    "resolver prefers native range/UIA and isolates synthetic fallback."
+    "resolver prefers native range/UIA, synthetic fallback stays isolated, and the global hook runs outside InputKey.exe."
 )

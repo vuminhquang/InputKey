@@ -1,4 +1,4 @@
-use crate::{settings_window, startup, ControlActions};
+use crate::{settings_window, ControlActions};
 use inputkey_core_abstractions::LanguageMetadata;
 use inputkey_windows_settings as settings;
 use std::sync::OnceLock;
@@ -270,6 +270,12 @@ unsafe fn show_menu(hwnd: HWND) {
                 0,
                 wide("Text Service: active").as_ptr(),
             );
+            AppendMenuW(
+                menu,
+                MF_STRING,
+                ID_INSTALL_TSF,
+                wide("Repair Text Service binding...").as_ptr(),
+            );
         } else if text_service_available {
             AppendMenuW(
                 menu,
@@ -294,9 +300,12 @@ unsafe fn show_menu(hwnd: HWND) {
             wide("Remove Windows integration...").as_ptr(),
         );
         AppendMenuW(menu, MF_SEPARATOR, 0, std::ptr::null());
+        let startup_enabled = ACTIONS
+            .get()
+            .is_some_and(|actions| (actions.startup_enabled)());
         AppendMenuW(
             menu,
-            MF_STRING | checked(startup::is_enabled()),
+            MF_STRING | checked(startup_enabled),
             ID_STARTUP,
             wide("Start with Windows").as_ptr(),
         );
@@ -336,7 +345,7 @@ fn turn_off_and_notify(hwnd: HWND) {
 
 unsafe fn remove_windows_integration(hwnd: HWND) {
     let title = wide("Remove InputKey from Windows");
-    let prompt = wide("This turns InputKey off, removes Start with Windows, unregisters the InputKey Text Service, and exits the tray app. The portable folder itself is not deleted.\n\nAlready-open applications may keep InputKeyTSF.dll loaded until they are closed. Continue?");
+    let prompt = wide("This turns InputKey off, removes Start with Windows, unregisters the InputKey Text Service, and exits the tray app. The portable folder itself is not deleted.\n\nAlready-open applications may keep their already-loaded InputKey runtime until they are closed. Continue?");
     let answer = unsafe {
         MessageBoxW(
             hwnd,
@@ -350,11 +359,11 @@ unsafe fn remove_windows_integration(hwnd: HWND) {
     }
 
     turn_off_and_notify(hwnd);
-    startup::set_enabled(false);
 
-    let removed = ACTIONS
-        .get()
-        .is_some_and(|actions| (actions.remove_windows_integration)());
+    let removed = ACTIONS.get().is_some_and(|actions| {
+        let startup_removed = !(actions.startup_enabled)() || (actions.set_startup_enabled)(false);
+        startup_removed && (actions.remove_windows_integration)()
+    });
     if removed {
         let message = wide("Windows integration was removed. You can move or delete the portable InputKey folder after closing applications that may still have InputKeyTSF.dll loaded.");
         unsafe {
@@ -454,7 +463,10 @@ unsafe extern "system" fn window_proc(
                     save_and_notify(current, hwnd);
                 }
                 ID_STARTUP => {
-                    startup::set_enabled(!startup::is_enabled());
+                    if let Some(actions) = ACTIONS.get() {
+                        let enabled = (actions.startup_enabled)();
+                        let _ = (actions.set_startup_enabled)(!enabled);
+                    }
                 }
                 ID_INSTALL_TSF => {
                     if let Some(actions) = ACTIONS.get() {

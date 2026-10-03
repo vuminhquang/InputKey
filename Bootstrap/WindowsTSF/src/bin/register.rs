@@ -41,6 +41,8 @@ fn main() -> windows::core::Result<()> {
                     .expect("registrar path")
                     .parent()
                     .expect("registrar directory")
+                    .join("runtime")
+                    .join(env!("CARGO_PKG_VERSION"))
                     .join("InputKeyTSF.dll")
             })
     };

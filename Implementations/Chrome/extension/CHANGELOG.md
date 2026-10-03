@@ -1,3 +1,11 @@
+# 5.2.3
+
+- Kept the 5.2.2 Vietnamese boundary fixes: physical consonant onsets are preserved, vowel-initial correction stays in the same vowel family, and `[` / `]` remain ordinary punctuation.
+- Isolated `Start with Windows` into `InputKeyStartup.exe`. Normal `InputKey.exe` startup never creates or repairs autorun state; the helper creates or removes a per-user Startup-folder shortcut only after the user explicitly toggles `Start with Windows` in the tray UI.
+- Moved the low-level compatibility hook and its fallback transports out of `InputKey.exe` into the lifecycle-bound `InputKeyCompatibility.exe` process. The tray/control executable no longer hosts global keyboard or mouse hooks in-process.
+- Windows TSF and native language packs now live under `runtime/<version>/`. Portable upgrades stage the complete new runtime before switching the stable TSF binding, so new applications use the new version while already-open applications can finish with the runtime they already loaded.
+- Added a guarded portable deployment flow that verifies package version and runtime bytes, preserves old runtimes, switches TSF only after staging succeeds, and refuses to overwrite a same-version runtime with different bytes.
+
 # 5.2.2
 
 - Boundary smart correction now preserves the physical initial consonant sequence, preventing cases such as `stop` being reinterpreted as `tóp` by consuming the leading `s` as a tone key.

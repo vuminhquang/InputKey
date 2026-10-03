@@ -8,6 +8,17 @@ license.workspace = true
 name = "InputKey"
 path = "src/main.rs"
 
+[[bin]]
+name = "InputKeyStartup"
+path = "src/bin/startup.rs"
+
+[[bin]]
+name = "InputKeyCompatibility"
+path = "src/bin/compatibility.rs"
+
+[build-dependencies]
+winres = "0.1"
+
 [dependencies]
 inputkey-core-abstractions = { path = "../../CoreAbstractions" }
 inputkey-runtime = { path = "../Runtime" }
@@ -18,9 +29,15 @@ inputkey-windows-tsf = { path = "../../Implementations/WindowsTSF" }
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.59", features = [
     "Win32_Foundation",
+    "Win32_Storage_FileSystem",
     "Win32_System_Com",
-    "Win32_System_Registry",
     "Win32_System_Threading",
     "Win32_UI_Shell",
     "Win32_UI_WindowsAndMessaging",
+] }
+windows = { version = "0.62", features = [
+    "Win32_Foundation",
+    "Win32_Storage_FileSystem",
+    "Win32_System_Com",
+    "Win32_UI_Shell",
 ] }

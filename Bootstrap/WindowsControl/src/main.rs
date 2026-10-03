@@ -1,26 +1,11 @@
 #![cfg_attr(windows, windows_subsystem = "windows")]
 
-use inputkey_core_abstractions::TypingEnginePort;
-use inputkey_runtime::{create_machine, Catalog};
+use inputkey_runtime::Catalog;
 use inputkey_windows_control::ControlActions;
-use inputkey_windows_hook::{Config, EngineConfig, EngineFactory};
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
-fn engine_factory(catalog: Arc<Catalog>) -> EngineFactory {
-    Arc::new(move |config: EngineConfig| {
-        let machine = create_machine(
-            catalog.as_ref(),
-            &config.language_id,
-            config.language.clone(),
-        )
-        .or_else(|_| {
-            let fallback = EngineConfig::default();
-            create_machine(catalog.as_ref(), &fallback.language_id, fallback.language)
-        })
-        .expect("bundled Vietnamese language pack");
-        Box::new(machine) as Box<dyn TypingEnginePort>
-    })
-}
+#[cfg(windows)]
+const COMPATIBILITY_RELOAD_EVENT: &str = "Local\\InputKey.Compatibility.Reload";
 
 #[cfg(windows)]
 struct ComApartment {
@@ -59,6 +44,123 @@ fn wide(text: &str) -> Vec<u16> {
 }
 
 #[cfg(windows)]
+fn package_directory() -> Option<std::path::PathBuf> {
+    std::env::current_exe()
+        .ok()
+        .and_then(|exe| exe.parent().map(std::path::Path::to_path_buf))
+}
+
+#[cfg(windows)]
+fn runtime_directory() -> Option<std::path::PathBuf> {
+    package_directory().map(|directory| directory.join("runtime").join(env!("CARGO_PKG_VERSION")))
+}
+
+#[cfg(windows)]
+fn runtime_tsf_dll() -> Option<std::path::PathBuf> {
+    runtime_directory().map(|directory| directory.join("InputKeyTSF.dll"))
+}
+
+#[cfg(windows)]
+fn configure_runtime_languages() {
+    if let Some(directory) = runtime_directory().map(|directory| directory.join("languages")) {
+        if directory.is_dir() {
+            std::env::set_var("INPUTKEY_LANGUAGE_PACK_DIR", directory);
+        }
+    }
+}
+
+#[cfg(windows)]
+fn registrar_path() -> Option<std::path::PathBuf> {
+    package_directory().map(|directory| directory.join("InputKeyTSFRegister.exe"))
+}
+
+#[cfg(windows)]
+fn run_registrar(arguments: &[String]) -> bool {
+    let Some(registrar) = registrar_path().filter(|path| path.is_file()) else {
+        return false;
+    };
+    std::process::Command::new(registrar)
+        .args(arguments)
+        .status()
+        .is_ok_and(|status| status.success())
+}
+
+#[cfg(windows)]
+fn startup_helper_path() -> Option<std::path::PathBuf> {
+    package_directory().map(|directory| directory.join("InputKeyStartup.exe"))
+}
+
+#[cfg(windows)]
+fn startup_enabled() -> bool {
+    let Some(helper) = startup_helper_path().filter(|path| path.is_file()) else {
+        return false;
+    };
+    let Ok(executable) = std::env::current_exe() else {
+        return false;
+    };
+    std::process::Command::new(helper)
+        .arg("--status")
+        .arg("--exe")
+        .arg(executable)
+        .status()
+        .is_ok_and(|status| status.success())
+}
+
+#[cfg(windows)]
+fn set_startup_enabled(enabled: bool) -> bool {
+    let Some(helper) = startup_helper_path().filter(|path| path.is_file()) else {
+        return false;
+    };
+    let mut command = std::process::Command::new(helper);
+    if enabled {
+        let Ok(executable) = std::env::current_exe() else {
+            return false;
+        };
+        command.arg("--enable").arg("--exe").arg(executable);
+    } else {
+        command.arg("--disable");
+    }
+    command.status().is_ok_and(|status| status.success())
+}
+
+#[cfg(windows)]
+fn compatibility_path() -> Option<std::path::PathBuf> {
+    package_directory().map(|directory| directory.join("InputKeyCompatibility.exe"))
+}
+
+#[cfg(windows)]
+fn start_compatibility() -> Option<std::process::Child> {
+    let helper = compatibility_path().filter(|path| path.is_file())?;
+    std::process::Command::new(helper)
+        .arg("--parent")
+        .arg(std::process::id().to_string())
+        .spawn()
+        .ok()
+}
+
+#[cfg(windows)]
+fn notify_compatibility_reload() {
+    use windows_sys::Win32::{
+        Foundation::CloseHandle,
+        System::Threading::{OpenEventW, SetEvent, EVENT_MODIFY_STATE},
+    };
+    let event = unsafe {
+        OpenEventW(
+            EVENT_MODIFY_STATE,
+            0,
+            wide(COMPATIBILITY_RELOAD_EVENT).as_ptr(),
+        )
+    };
+    if event.is_null() {
+        return;
+    }
+    unsafe {
+        SetEvent(event);
+        CloseHandle(event);
+    }
+}
+
+#[cfg(windows)]
 fn register_text_service_elevated() -> bool {
     use windows_sys::Win32::{
         Foundation::CloseHandle,
@@ -76,7 +178,9 @@ fn register_text_service_elevated() -> bool {
         return false;
     };
     let registrar = directory.join("InputKeyTSFRegister.exe");
-    let dll = directory.join("InputKeyTSF.dll");
+    let Some(dll) = runtime_tsf_dll() else {
+        return false;
+    };
     if !registrar.is_file() || !dll.is_file() {
         return false;
     }
@@ -149,13 +253,10 @@ fn show_text_service_result(active: bool, installed_now: bool) {
 
 #[cfg(windows)]
 fn bind_packaged_text_service() {
-    if !inputkey_windows_tsf::text_service_available() {
+    if !inputkey_windows_tsf::text_service_registered() {
         return;
     }
-    let Ok(executable) = std::env::current_exe() else {
-        return;
-    };
-    let Some(directory) = executable.parent() else {
+    let Some(directory) = runtime_directory() else {
         return;
     };
     let dll = directory.join("InputKeyTSF.dll");
@@ -163,7 +264,17 @@ fn bind_packaged_text_service() {
     if !dll.is_file() || !languages.is_dir() {
         return;
     }
-    let _ = inputkey_windows_tsf::bind_text_service_dll(&dll);
+    let _ = run_registrar(&[
+        "--bind-only".to_owned(),
+        "--dll".to_owned(),
+        dll.to_string_lossy().into_owned(),
+    ]);
+}
+
+#[cfg(windows)]
+fn unregister_packaged_text_service() -> bool {
+    let _ = run_registrar(&["--disable".to_owned()]);
+    run_registrar(&["--unregister".to_owned()])
 }
 
 #[cfg(windows)]
@@ -176,7 +287,12 @@ fn install_text_service() {
         }
 
         let already_available = inputkey_windows_tsf::text_service_available();
-        let registered = already_available || register_text_service_elevated();
+        let registered = if already_available {
+            bind_packaged_text_service();
+            true
+        } else {
+            register_text_service_elevated()
+        };
         let active = registered
             && inputkey_windows_tsf::activate_text_service().is_ok()
             && inputkey_windows_tsf::text_service_active();
@@ -193,21 +309,12 @@ fn main() {
     let tsf_com_ready = false;
 
     #[cfg(windows)]
-    if tsf_com_ready {
-        bind_packaged_text_service();
-    }
+    configure_runtime_languages();
 
     let catalog = Arc::new(Catalog::installed());
-    let factory = engine_factory(Arc::clone(&catalog));
-    let compatibility = inputkey_windows_hook::start(
-        Config {
-            capture_enabled: true,
-            engine: EngineConfig::default(),
-        },
-        factory,
-    )
-    .ok()
-    .map(|handle| Arc::new(Mutex::new(handle)));
+
+    #[cfg(windows)]
+    let mut compatibility = start_compatibility();
 
     if tsf_com_ready
         && inputkey_windows_tsf::text_service_available()
@@ -216,15 +323,11 @@ fn main() {
         let _ = inputkey_windows_tsf::activate_text_service();
     }
 
-    let settings_hook = compatibility.clone();
     let language_catalog = Arc::clone(&catalog);
     let actions = ControlActions {
         settings_changed: Arc::new(move || {
-            if let Some(handle) = &settings_hook {
-                if let Ok(handle) = handle.lock() {
-                    handle.reload_settings();
-                }
-            }
+            #[cfg(windows)]
+            notify_compatibility_reload();
         }),
         languages: Arc::new(move || {
             use inputkey_core_abstractions::LanguageCatalogPort;
@@ -234,14 +337,34 @@ fn main() {
             #[cfg(windows)]
             install_text_service();
         }),
+        startup_enabled: Arc::new(|| {
+            #[cfg(windows)]
+            {
+                startup_enabled()
+            }
+            #[cfg(not(windows))]
+            {
+                false
+            }
+        }),
+        set_startup_enabled: Arc::new(|enabled| {
+            #[cfg(windows)]
+            {
+                set_startup_enabled(enabled)
+            }
+            #[cfg(not(windows))]
+            {
+                let _ = enabled;
+                false
+            }
+        }),
         remove_windows_integration: Arc::new(move || {
             #[cfg(windows)]
             {
                 if !tsf_com_ready {
                     return false;
                 }
-                let _ = inputkey_windows_tsf::disable_text_service();
-                inputkey_windows_tsf::unregister_text_service().is_ok()
+                unregister_packaged_text_service()
             }
             #[cfg(not(windows))]
             {
@@ -257,4 +380,10 @@ fn main() {
     };
 
     inputkey_windows_control::run(actions);
+
+    #[cfg(windows)]
+    if let Some(child) = compatibility.as_mut() {
+        let _ = child.kill();
+        let _ = child.wait();
+    }
 }

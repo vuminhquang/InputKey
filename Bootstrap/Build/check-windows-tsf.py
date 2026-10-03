@@ -62,14 +62,20 @@ registration = (ROOT / "Implementations" / "WindowsTSF" / "src" / "registration.
 registrar = (ROOT / "Bootstrap" / "WindowsTSF" / "src" / "bin" / "register.rs").read_text(encoding="utf-8")
 control = (ROOT / "Bootstrap" / "WindowsControl" / "src" / "main.rs").read_text(encoding="utf-8")
 build = (ROOT / "Bootstrap" / "Build" / "build-windows.ps1").read_text(encoding="utf-8")
+deploy = (ROOT / "Bootstrap" / "Build" / "deploy-windows-portable.ps1").read_text(encoding="utf-8")
 bootstrap_tsf = (ROOT / "Bootstrap" / "WindowsTSF" / "src" / "lib.rs").read_text(encoding="utf-8")
 
 for label, text, required in [
     ("registration", registration, "bind_text_service_dll"),
     ("registrar", registrar, "--bind-only"),
+    ("registrar", registrar, '.join("runtime")'),
     ("packaged control", control, "bind_packaged_text_service"),
-    ("packaged control", control, 'directory.join("languages")'),
-    ("Windows build", build, "-loaded-"),
+    ("packaged control", control, "runtime_directory"),
+    ("packaged control", control, "run_registrar"),
+    ("Windows build", build, "InputKeyCompatibility.exe"),
+    ("Windows build", build, "runtime\\"),
+    ("portable deploy", deploy, "legacy_runtimes=preserved"),
+    ("portable deploy", deploy, "--bind-only"),
     ("TSF bootstrap", bootstrap_tsf, "tsf_factory_selects_french_language"),
 ]:
     if required not in text:
@@ -81,4 +87,4 @@ if errors:
         print(f"- {error}")
     sys.exit(1)
 
-print("Windows TSF contract passed: composition-owned text, selection replacement, no injection/clipboard/timing workaround.")
+print("Windows TSF contract passed: composition-owned text, versioned runtime binding, and side-by-side upgrade invariants are intact.")

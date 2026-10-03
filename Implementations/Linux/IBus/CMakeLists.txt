@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.16)
-project(inputkey-ibus VERSION 5.2.2 LANGUAGES C)
+project(inputkey-ibus VERSION 5.2.3 LANGUAGES C)
 
 include(GNUInstallDirs)
 find_package(PkgConfig REQUIRED)

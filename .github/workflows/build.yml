@@ -80,6 +80,9 @@ jobs:
       - name: Windows TSF contract
         run: python Bootstrap/Build/check-windows-tsf.py
 
+      - name: Windows startup persistence contract
+        run: python Bootstrap/Build/check-windows-startup.py
+
       - name: Rust format
         run: cargo fmt --all -- --check
 
