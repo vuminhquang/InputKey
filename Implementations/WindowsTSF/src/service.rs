@@ -376,12 +376,13 @@ impl EditSession {
     fn start_composition_from_selection(
         &self,
         ec: u32,
-        text: &str,
     ) -> Result<(ITfComposition, windows::Win32::UI::TextServices::ITfRange)> {
         let insertion: ITfInsertAtSelection = self.context.cast()?;
-        let utf16: Vec<u16> = text.encode_utf16().collect();
+        // Establish an empty composition before mutating application text. If
+        // composition startup fails, the physical key can still safely pass
+        // through because no text has been inserted yet.
         let range =
-            unsafe { insertion.InsertTextAtSelection(ec, TF_IAS_NO_DEFAULT_COMPOSITION, &utf16)? };
+            unsafe { insertion.InsertTextAtSelection(ec, TF_IAS_NO_DEFAULT_COMPOSITION, &[])? };
         let context_composition: ITfContextComposition = self.context.cast()?;
         let sink: ITfCompositionSink = CompositionSink {
             control: Rc::clone(&self.control),
@@ -486,20 +487,25 @@ impl EditSession {
 
         let (composition, range) = if let Some(composition) = existing {
             let range = unsafe { composition.GetRange()? };
-            let utf16: Vec<u16> = text.encode_utf16().collect();
-            unsafe {
-                range.SetText(ec, 0, &utf16)?;
-            }
             (composition, range)
         } else {
-            self.start_composition_from_selection(ec, text)?
+            self.start_composition_from_selection(ec)?
         };
 
-        self.set_caret_at_end(ec, &range)?;
+        let utf16: Vec<u16> = text.encode_utf16().collect();
+        unsafe {
+            range.SetText(ec, 0, &utf16)?;
+        }
+
+        // SetText is the ownership boundary: from here on the application text
+        // has already been mutated by the IME. Auxiliary caret placement or
+        // native composition cleanup must never turn this handled key into a
+        // pass-through key, which would duplicate the physical character.
+        let _ = self.set_caret_at_end(ec, &range);
 
         if end || text.is_empty() {
             unsafe {
-                composition.EndComposition(ec)?;
+                let _ = composition.EndComposition(ec);
             }
             self.control
                 .runtime

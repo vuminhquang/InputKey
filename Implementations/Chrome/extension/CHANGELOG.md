@@ -16,6 +16,7 @@
 - Fixed Enter/Tab/navigation requiring a second key press after an active TSF composition. Natural keyboard boundaries now enter the root `NaturalBoundary` state from the non-filtering TSF key-trace observer, so the same physical key continues to the application once.
 - Added a distinct root `MouseBoundary` state for pointer/caret relocation. Windows TSF tracks mouse activity across the active text context and commits displayed composition before the caret moves; the Windows compatibility hook, Chrome/Edge, and macOS adapters route their real mouse events through the same root boundary contract. The old direct `commit_displayed` API was removed.
 - Fixed duplicate characters in TSF hosts when optional mouse tracking could not be attached. Mouse tracking now joins the same owned composition edit session and can no longer release an already handled physical key back to the application.
+- Fixed duplicated physical characters such as `a` becoming `aa` when TSF had already changed application text but a later caret-placement or composition-cleanup operation failed. Composition now starts before application text is mutated, and every post-mutation step is non-owning/best-effort.
 - Updated Chrome/Edge WASM to use the same language catalog and root composition contract.
 
 # 5.0.0
