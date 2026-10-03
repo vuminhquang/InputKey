@@ -40,6 +40,11 @@ for required in [
     if required not in service:
         errors.append(f"WindowsTSF service missing lifecycle primitive: {required}")
 
+if "let _ = self.install_mouse_tracking(ec, mouse_sink);" not in service:
+    errors.append("WindowsTSF mouse tracking must be best-effort inside the owned update edit session")
+if "ensure_mouse_tracking" in service:
+    errors.append("WindowsTSF must not open a second post-key mouse-tracking edit session")
+
 registration = (ROOT / "Implementations" / "WindowsTSF" / "src" / "registration.rs").read_text(encoding="utf-8")
 registrar = (ROOT / "Bootstrap" / "WindowsTSF" / "src" / "bin" / "register.rs").read_text(encoding="utf-8")
 control = (ROOT / "Bootstrap" / "WindowsControl" / "src" / "main.rs").read_text(encoding="utf-8")

@@ -89,10 +89,12 @@ fn reload_settings_message() -> u32 {
 
 #[derive(Clone)]
 enum EditAction {
-    Update(String),
+    Update {
+        text: String,
+        mouse_sink: ITfMouseSink,
+    },
     Commit(String),
     ValidateCaret(Arc<std::sync::atomic::AtomicBool>),
-    TrackMouse(ITfMouseSink),
 }
 
 struct MouseTracking {
@@ -316,6 +318,7 @@ impl ITfCompositionSink_Impl for CompositionSink_Impl {
         _ecwrite: u32,
         _pcomposition: Ref<ITfComposition>,
     ) -> Result<()> {
+        self.control.clear_mouse_tracking();
         self.control.runtime.lock().expect("runtime lock").reset();
         self.control.notify_composition_state(false);
         Ok(())
@@ -512,7 +515,14 @@ impl EditSession {
 impl ITfEditSession_Impl for EditSession_Impl {
     fn DoEditSession(&self, ec: u32) -> Result<()> {
         match &self.action {
-            EditAction::Update(text) => self.replace_composition(ec, text, false),
+            EditAction::Update { text, mouse_sink } => {
+                self.replace_composition(ec, text, false)?;
+                // Mouse tracking is auxiliary. Once the composition update has
+                // succeeded, failure to attach the tracker must never release
+                // ownership of the physical key back to the application.
+                let _ = self.install_mouse_tracking(ec, mouse_sink);
+                Ok(())
+            }
             EditAction::Commit(text) => self.replace_composition(ec, text, true),
             EditAction::ValidateCaret(moved) => {
                 let valid = self.caret_is_at_composition_end(ec)?;
@@ -522,7 +532,6 @@ impl ITfEditSession_Impl for EditSession_Impl {
                 }
                 Ok(())
             }
-            EditAction::TrackMouse(sink) => self.install_mouse_tracking(ec, sink),
         }
     }
 }
@@ -670,13 +679,6 @@ impl TextService {
         Ok(moved.load(Ordering::Acquire))
     }
 
-    fn ensure_mouse_tracking(&self, context: &ITfContext, sink: &ITfMouseSink) -> Result<()> {
-        if !self.control.runtime.lock().expect("runtime lock").active() {
-            return Ok(());
-        }
-        request_edit(&self.control, context, EditAction::TrackMouse(sink.clone()))
-    }
-
     fn commit_mouse_boundary(&self) {
         let text = {
             let mut runtime = self.control.runtime.lock().expect("runtime lock");
@@ -714,7 +716,12 @@ impl TextService {
         self.delimiter_char(vk).is_some()
     }
 
-    fn handle_key_down(&self, context: &ITfContext, vk: u32) -> Result<BOOL> {
+    fn handle_key_down(
+        &self,
+        context: &ITfContext,
+        vk: u32,
+        mouse_sink: &ITfMouseSink,
+    ) -> Result<BOOL> {
         if !self.control.enabled.load(Ordering::Acquire) {
             return Ok(BOOL::from(false));
         }
@@ -750,7 +757,16 @@ impl TextService {
                 let mut runtime = self.control.runtime.lock().expect("runtime lock");
                 runtime.engine.type_key(ch)
             };
-            if request_edit(&self.control, context, EditAction::Update(text)).is_err() {
+            if request_edit(
+                &self.control,
+                context,
+                EditAction::Update {
+                    text,
+                    mouse_sink: mouse_sink.clone(),
+                },
+            )
+            .is_err()
+            {
                 self.fail_open();
                 return Ok(BOOL::from(false));
             }
@@ -772,7 +788,16 @@ impl TextService {
                 }
                 runtime.engine.backspace()
             };
-            if request_edit(&self.control, context, EditAction::Update(text)).is_err() {
+            if request_edit(
+                &self.control,
+                context,
+                EditAction::Update {
+                    text,
+                    mouse_sink: mouse_sink.clone(),
+                },
+            )
+            .is_err()
+            {
                 self.fail_open();
                 return Ok(BOOL::from(false));
             }
@@ -790,7 +815,16 @@ impl TextService {
                 }
                 runtime.engine.escape()
             };
-            if request_edit(&self.control, context, EditAction::Update(text)).is_err() {
+            if request_edit(
+                &self.control,
+                context,
+                EditAction::Update {
+                    text,
+                    mouse_sink: mouse_sink.clone(),
+                },
+            )
+            .is_err()
+            {
                 self.fail_open();
                 return Ok(BOOL::from(false));
             }
@@ -909,15 +943,8 @@ impl ITfKeyEventSink_Impl for TextService_Impl {
 
     fn OnKeyDown(&self, pic: Ref<ITfContext>, wparam: WPARAM, _lparam: LPARAM) -> Result<BOOL> {
         let context = pic.ok()?;
-        let eaten = self.handle_key_down(context, wparam.0 as u32)?;
-        if eaten.as_bool() {
-            let sink: ITfMouseSink = self.to_interface();
-            if self.ensure_mouse_tracking(context, &sink).is_err() {
-                self.fail_open();
-                return Ok(BOOL::from(false));
-            }
-        }
-        Ok(eaten)
+        let sink: ITfMouseSink = self.to_interface();
+        self.handle_key_down(context, wparam.0 as u32, &sink)
     }
 
     fn OnKeyUp(&self, _pic: Ref<ITfContext>, wparam: WPARAM, _lparam: LPARAM) -> Result<BOOL> {
@@ -1002,7 +1029,7 @@ impl IClassFactory_Impl for TextServiceClassFactory_Impl {
             SERVER_LOCKS.fetch_add(1, Ordering::AcqRel);
         } else {
             SERVER_LOCKS
-                .fetch_update(Ordering::AcqRel, Ordering::Acquire, |value| {
+                .try_update(Ordering::AcqRel, Ordering::Acquire, |value| {
                     Some(value.saturating_sub(1))
                 })
                 .ok();
