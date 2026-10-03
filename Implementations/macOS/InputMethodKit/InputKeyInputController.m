@@ -1,4 +1,5 @@
 #import "InputKeyInputController.h"
+#import "InputKeySettingsWindowController.h"
 
 #import <AppKit/AppKit.h>
 #import <InputMethodKit/InputMethodKit.h>
@@ -97,11 +98,19 @@ static BOOL InputKeyAcceptsKey(uint64_t handle, NSString *key) {
                       delegate:(id)delegate
                         client:(id)inputClient {
     self = [super initWithServer:server delegate:delegate client:inputClient];
-    if (self != nil) [self rebuildCore];
+    if (self != nil) {
+        [self rebuildCore];
+        [[NSNotificationCenter defaultCenter]
+            addObserver:self
+               selector:@selector(settingsDidChange:)
+                   name:InputKeySettingsDidChangeNotification
+                 object:nil];
+    }
     return self;
 }
 
 - (void)dealloc {
+    [[NSNotificationCenter defaultCenter] removeObserver:self];
     if (_core != 0) {
         inputkey_destroy(_core);
         _core = 0;
@@ -170,6 +179,17 @@ static BOOL InputKeyAcceptsKey(uint64_t handle, NSString *key) {
     NSString *method = [self configuredMethod];
     NSString *options = [self optionsJSON];
     _core = inputkey_create_ex(language.UTF8String, method.UTF8String, options.UTF8String);
+}
+
+- (void)settingsDidChange:(NSNotification *)notification {
+    (void)notification;
+    [self commitCurrentTokenFinalizing:YES client:[self client]];
+    [self rebuildCore];
+}
+
+- (void)showPreferences:(id)sender {
+    (void)sender;
+    [[InputKeySettingsWindowController sharedController] show];
 }
 
 - (BOOL)hasActiveToken {
@@ -363,6 +383,12 @@ static BOOL InputKeyAcceptsKey(uint64_t handle, NSString *key) {
             ? NSControlStateValueOn : NSControlStateValueOff;
         [menu addItem:item];
     }
+    [menu addItem:[NSMenuItem separatorItem]];
+    NSMenuItem *preferences = [[NSMenuItem alloc] initWithTitle:@"InputKey Settings..."
+                                                         action:@selector(showPreferences:)
+                                                  keyEquivalent:@""];
+    preferences.target = self;
+    [menu addItem:preferences];
     return menu;
 }
 

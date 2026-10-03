@@ -1,4 +1,4 @@
-use crate::{startup, ControlActions};
+use crate::{settings_window, startup, ControlActions};
 use inputkey_core_abstractions::LanguageMetadata;
 use inputkey_windows_settings as settings;
 use std::sync::OnceLock;
@@ -11,6 +11,8 @@ const CLASS_NAME: &str = "InputKeyControlWindow";
 const TSF_CONTROL_CLASS: &str = "InputKeyTSFControlWindow";
 const TRAY_MESSAGE: u32 = WM_APP + 11;
 const ID_TOGGLE: usize = 101;
+const ID_SETTINGS: usize = 102;
+const ID_SIMPLE_TELEX: usize = 103;
 const ID_AUTO_RESTORE: usize = 104;
 const ID_SMART_CORRECTION: usize = 105;
 const ID_STARTUP: usize = 106;
@@ -215,6 +217,15 @@ unsafe fn show_menu(hwnd: HWND) {
                 );
             }
 
+            let has_simple_telex = language.options.iter().any(|o| o.id == "simple_telex");
+            if has_simple_telex {
+                AppendMenuW(
+                    menu,
+                    MF_STRING | checked(current.simple_telex),
+                    ID_SIMPLE_TELEX,
+                    wide("Simple Telex").as_ptr(),
+                );
+            }
             let has_auto_restore = language.options.iter().any(|o| o.id == "auto_restore");
             if has_auto_restore {
                 AppendMenuW(
@@ -235,6 +246,8 @@ unsafe fn show_menu(hwnd: HWND) {
             }
         }
 
+        AppendMenuW(menu, MF_SEPARATOR, 0, std::ptr::null());
+        AppendMenuW(menu, MF_STRING, ID_SETTINGS, wide("Settings...").as_ptr());
         AppendMenuW(menu, MF_SEPARATOR, 0, std::ptr::null());
 
         let text_service_available = ACTIONS
@@ -346,6 +359,15 @@ unsafe extern "system" fn window_proc(
                         }
                     }
                 }
+                ID_SETTINGS => unsafe {
+                    if let Some(actions) = ACTIONS.get() {
+                        settings_window::show(hwnd, actions);
+                    }
+                },
+                ID_SIMPLE_TELEX => {
+                    current.simple_telex = !current.simple_telex;
+                    save_and_notify(current, hwnd);
+                }
                 ID_AUTO_RESTORE => {
                     current.auto_restore = !current.auto_restore;
                     save_and_notify(current, hwnd);
@@ -370,6 +392,13 @@ unsafe extern "system" fn window_proc(
                     }
                 }
                 _ => {}
+            }
+            0
+        }
+        settings_window::SETTINGS_CHANGED_MESSAGE => {
+            notify_settings_changed();
+            unsafe {
+                update_tray(hwnd);
             }
             0
         }

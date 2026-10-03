@@ -160,6 +160,10 @@ impl ControlState {
         config
             .language
             .toggles
+            .insert("simple_telex".into(), persisted.simple_telex);
+        config
+            .language
+            .toggles
             .insert("auto_restore".into(), persisted.auto_restore);
         config
             .language
@@ -205,6 +209,10 @@ impl ControlState {
             let mut config = self.config.lock().expect("config lock");
             config.language_id = persisted.language.clone();
             config.language.method = persisted.method.clone();
+            config
+                .language
+                .toggles
+                .insert("simple_telex".into(), persisted.simple_telex);
             config
                 .language
                 .toggles

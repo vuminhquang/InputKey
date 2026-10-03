@@ -3,6 +3,7 @@ pub struct Settings {
     pub enabled: bool,
     pub language: String,
     pub method: String,
+    pub simple_telex: bool,
     pub auto_restore: bool,
     pub smart_correction: bool,
 }
@@ -13,6 +14,7 @@ impl Default for Settings {
             enabled: true,
             language: "vi".into(),
             method: "telex".into(),
+            simple_telex: false,
             auto_restore: true,
             smart_correction: true,
         }
@@ -140,6 +142,9 @@ mod registry {
                 enabled: read_dword(key, "Enabled").unwrap_or(defaults.enabled as u32) != 0,
                 language,
                 method,
+                simple_telex: read_dword(key, "SimpleTelex")
+                    .unwrap_or(defaults.simple_telex as u32)
+                    != 0,
                 auto_restore: read_dword(key, "AutoRestore")
                     .unwrap_or(defaults.auto_restore as u32)
                     != 0,
@@ -185,6 +190,7 @@ mod registry {
                     u32::from(settings.method.eq_ignore_ascii_case("vni")),
                 );
             }
+            write_dword(key, "SimpleTelex", settings.simple_telex as u32);
             write_dword(key, "AutoRestore", settings.auto_restore as u32);
             write_dword(key, "SmartCorrection", settings.smart_correction as u32);
             let _ = RegCloseKey(key);
@@ -212,6 +218,7 @@ mod tests {
         let settings = Settings::default();
         assert_eq!(settings.language, "vi");
         assert_eq!(settings.method, "telex");
+        assert!(!settings.simple_telex);
         assert!(settings.smart_correction);
     }
 }

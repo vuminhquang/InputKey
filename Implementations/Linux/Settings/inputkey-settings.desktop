@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=InputKey Settings
+Comment=Configure InputKey language and input method
+Exec=inputkey-settings
+Icon=input-keyboard
+Terminal=false
+Categories=Settings;Utility;
+StartupNotify=true

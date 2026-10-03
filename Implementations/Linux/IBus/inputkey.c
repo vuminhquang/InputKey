@@ -352,8 +352,18 @@ static void reset_engine(IBusEngine *engine) {
     clear_preedit(self);
 }
 
+static void reload_persisted_settings(InputKeyEngine *self) {
+    if (inputkey_has_history(self->core)) {
+        commit_text_owned(self, lifecycle_core(self->core, "finalize"));
+    }
+    inputkey_linux_settings_load(&self->settings);
+    create_core(self);
+    refresh_properties(self);
+    clear_preedit(self);
+}
+
 static void focus_in(IBusEngine *engine) {
-    refresh_properties((InputKeyEngine *)engine);
+    reload_persisted_settings((InputKeyEngine *)engine);
 }
 
 static void focus_out(IBusEngine *engine) {
@@ -366,7 +376,7 @@ static void focus_out(IBusEngine *engine) {
 }
 
 static void enable_engine(IBusEngine *engine) {
-    refresh_properties((InputKeyEngine *)engine);
+    reload_persisted_settings((InputKeyEngine *)engine);
 }
 
 static void disable_engine(IBusEngine *engine) {

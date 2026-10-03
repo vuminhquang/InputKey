@@ -341,6 +341,10 @@ public:
     void activate(
         const fcitx::InputMethodEntry &,
         fcitx::InputContextEvent &event) override {
+        inputkey_linux_settings_load(&settings_);
+        validateSettings();
+        auto *state = event.inputContext()->propertyFor(&factory_);
+        if (state) state->rebuild(settings_);
         event.inputContext()->statusArea().addAction(
             fcitx::StatusGroup::InputMethod, rootAction_.get());
     }

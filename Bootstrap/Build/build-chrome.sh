@@ -6,6 +6,8 @@ EXT="$ROOT/Implementations/Chrome/extension"
 DIST="$ROOT/dist/chrome"
 STAGE="$ROOT/dist/.chrome-stage"
 
+python3 "$ROOT/Bootstrap/Build/check-chrome-ui.py"
+
 rustup target add wasm32-unknown-unknown
 cargo build --release -p inputkey-wasm --target wasm32-unknown-unknown --manifest-path "$ROOT/Cargo.toml"
 cp "$ROOT/target/wasm32-unknown-unknown/release/inputkey_wasm.wasm" "$EXT/inputkey.wasm"

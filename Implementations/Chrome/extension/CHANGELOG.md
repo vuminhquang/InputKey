@@ -1,3 +1,11 @@
+# 5.2.0
+
+- Added native settings UI for Windows, macOS, and Linux while keeping the Chromium extension popup as the browser settings surface.
+- Added a Chrome UI packaging contract so CI fails if the popup, manifest wiring, or required UI assets disappear.
+- Windows settings now expose the active language, input method, Simple Telex, Auto Restore, Smart correction, and enable state through a native Win32 window opened from the tray menu.
+- macOS now includes an AppKit settings window opened from the InputMethodKit menu, with live runtime reload after changes.
+- Linux now packages a GTK settings application backed by the same persisted adapter settings; Fcitx5 and IBus reload persisted settings when activated or focused.
+
 # 5.1.0
 
 - Replaced the procedural Root-to-language API with semantic `RootTransition` events. Language packs now use transition-only ABI v3; the public C/WASM semantic ABI is v4. Space and punctuation remain distinct root states but share the language boundary policy, and command chords use `ShortcutBoundary`.

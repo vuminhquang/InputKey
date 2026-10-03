@@ -11,6 +11,8 @@ pub struct ControlActions {
 }
 
 #[cfg(windows)]
+mod settings_window;
+#[cfg(windows)]
 mod startup;
 #[cfg(windows)]
 mod win32;

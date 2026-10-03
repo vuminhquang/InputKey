@@ -10,6 +10,7 @@ clang -fobjc-arc -framework Cocoa -framework InputMethodKit \
   -I Boundary/NativeABI \
   Implementations/macOS/InputMethodKit/main.m \
   Implementations/macOS/InputMethodKit/InputKeyInputController.m \
+  Implementations/macOS/InputMethodKit/InputKeySettingsWindowController.m \
   -L target/release -linputkey_cabi \
   -Wl,-rpath,@executable_path/../Frameworks \
   -o /tmp/InputKey

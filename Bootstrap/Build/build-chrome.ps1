@@ -6,6 +6,9 @@ $Stage = Join-Path $Root "dist\.chrome-stage"
 
 Push-Location $Root
 try {
+    python Bootstrap\Build\check-chrome-ui.py
+    if ($LASTEXITCODE) { throw "Chrome UI contract failed" }
+
     rustup target add wasm32-unknown-unknown
     if ($LASTEXITCODE) { throw "Could not install wasm32-unknown-unknown target" }
 

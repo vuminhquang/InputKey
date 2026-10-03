@@ -62,6 +62,28 @@ for cause in (
                 f"Linux adapter contract failed: {name} is missing caret cause {cause}"
             )
 
+settings_ui_path = root / "Implementations/Linux/Settings/inputkey_settings_app.c"
+if not settings_ui_path.is_file():
+    raise SystemExit("Linux adapter contract failed: native settings app is missing")
+settings_ui = settings_ui_path.read_text(encoding="utf-8")
+for token in (
+    "gtk_window_new",
+    "inputkey_linux_settings_load",
+    "inputkey_linux_settings_save",
+    "inputkey_language_count",
+    "inputkey_method_count",
+    "inputkey_option_count",
+):
+    if token not in settings_ui:
+        raise SystemExit(
+            f"Linux adapter contract failed: native settings app is missing {token}"
+        )
+
+if "inputkey_linux_settings_load(&settings_)" not in adapters["Fcitx5"]:
+    raise SystemExit("Linux adapter contract failed: Fcitx5 does not reload persisted settings")
+if "reload_persisted_settings" not in adapters["IBus"]:
+    raise SystemExit("Linux adapter contract failed: IBus does not reload persisted settings")
+
 legacy = (
     "ShortcutConfig",
     "inputkey_shortcut_reload",
@@ -77,5 +99,6 @@ for name, source in adapters.items():
 
 print(
     "Linux adapter contract passed: Fcitx5 and IBus route physical input through "
-    "the semantic C ABI and keep AltGr out of command shortcuts."
+    "the semantic C ABI, keep AltGr out of command shortcuts, and package a native "
+    "settings surface backed by persisted adapter settings."
 )

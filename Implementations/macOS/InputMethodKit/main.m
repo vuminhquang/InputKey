@@ -15,7 +15,7 @@ int main(int argc, const char *argv[]) {
         }];
 
         NSApplication *app = [NSApplication sharedApplication];
-        [app setActivationPolicy:NSApplicationActivationPolicyProhibited];
+        [app setActivationPolicy:NSApplicationActivationPolicyAccessory];
 
         NSString *bundleIdentifier = [[NSBundle mainBundle] bundleIdentifier];
         if (bundleIdentifier.length == 0) {

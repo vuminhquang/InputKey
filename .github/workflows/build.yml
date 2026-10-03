@@ -23,10 +23,13 @@ jobs:
       - name: Install native adapter dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y cmake pkg-config zip gcc g++ libibus-1.0-dev libfcitx5core-dev
+          sudo apt-get install -y cmake pkg-config zip gcc g++ libibus-1.0-dev libfcitx5core-dev libgtk-3-dev
 
       - name: Architecture
         run: python3 Bootstrap/Build/check-architecture.py
+
+      - name: Chrome UI contract
+        run: python3 Bootstrap/Build/check-chrome-ui.py
 
       - name: Rust format
         run: cargo fmt --all -- --check

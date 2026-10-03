@@ -373,6 +373,10 @@ fn apply_settings(
     config
         .language
         .toggles
+        .insert("simple_telex".into(), settings.simple_telex);
+    config
+        .language
+        .toggles
         .insert("auto_restore".into(), settings.auto_restore);
     config
         .language
