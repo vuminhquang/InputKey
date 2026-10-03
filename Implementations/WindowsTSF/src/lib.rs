@@ -5,6 +5,7 @@ pub use config::{EngineConfig, EngineFactory};
 pub const CLSID_INPUTKEY_VALUE: u128 = 0x5f4a4c92_85b3_4f69_a6bc_b427d51d5e50;
 pub const CLSID_INPUTKEY_STR: &str = "{5F4A4C92-85B3-4F69-A6BC-B427D51D5E50}";
 pub const GUID_INPUTKEY_PROFILE_VALUE: u128 = 0x612a5f0f_30cd_49ad_9e95_40dc3a27d4f7;
+pub const GUID_INPUTKEY_PROFILE_STR: &str = "{612A5F0F-30CD-49AD-9E95-40DC3A27D4F7}";
 
 #[cfg(windows)]
 pub const CLSID_INPUTKEY_TEXT_SERVICE: windows_core::GUID =
@@ -24,7 +25,8 @@ mod service;
 #[cfg(windows)]
 pub use registration::{
     activate_text_service, bind_text_service_dll, disable_text_service, register_text_service,
-    text_service_active, text_service_available, text_service_registered, unregister_text_service,
+    text_service_active, text_service_available, text_service_bound, text_service_registered,
+    unregister_text_service,
 };
 #[cfg(windows)]
 pub use service::{can_unload_now, class_factory};

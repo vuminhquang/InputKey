@@ -17,6 +17,10 @@ const INPUT_MOD_ALT: u8 = 2;
 const INPUT_MOD_SHIFT: u8 = 4;
 const INPUT_MOD_WIN: u8 = 8;
 
+const CAPABILITY_UNKNOWN: u8 = 0;
+const CAPABILITY_SUPPORTED: u8 = 1;
+const CAPABILITY_UNSUPPORTED: u8 = 2;
+
 struct Shared {
     queue: SpscRing<Event, 256>,
     work: usize,
@@ -24,6 +28,8 @@ struct Shared {
     enabled: AtomicBool,
     active: AtomicBool,
     active_target: AtomicUsize,
+    capability_target: AtomicUsize,
+    capability_state: AtomicU8,
     epoch: AtomicU64,
     modifiers: AtomicU8,
     engine_config: Mutex<EngineConfig>,
@@ -44,6 +50,31 @@ fn state() -> Option<&'static Shared> {
     } else {
         Some(unsafe { &*ptr })
     }
+}
+
+fn cached_capability(shared: &Shared, target: HWND) -> u8 {
+    if shared.capability_target.load(Ordering::Acquire) == target as usize {
+        shared.capability_state.load(Ordering::Acquire)
+    } else {
+        CAPABILITY_UNKNOWN
+    }
+}
+
+fn set_capability(shared: &Shared, target: HWND, capability: u8) {
+    shared
+        .capability_state
+        .store(CAPABILITY_UNKNOWN, Ordering::Release);
+    shared
+        .capability_target
+        .store(target as usize, Ordering::Release);
+    shared.capability_state.store(capability, Ordering::Release);
+}
+
+fn invalidate_capability(shared: &Shared) {
+    shared
+        .capability_state
+        .store(CAPABILITY_UNKNOWN, Ordering::Release);
+    shared.capability_target.store(0, Ordering::Release);
 }
 
 fn modifier(vk: u32) -> u8 {
@@ -197,15 +228,23 @@ fn focused_target() -> HWND {
     }
 }
 
-fn push(shared: &Shared, kind: EventKind, vk: u32, mods: u8, target: HWND) -> bool {
+fn push_event(
+    shared: &Shared,
+    kind: EventKind,
+    vk: u32,
+    mods: u8,
+    target: HWND,
+    scan_code: u16,
+    extended: bool,
+) -> bool {
     let event = Event {
         kind,
         vk: vk as u16,
         modifiers: mods,
         target: target as usize,
         epoch: shared.epoch.load(Ordering::Acquire),
-        scan_code: 0,
-        extended: false,
+        scan_code,
+        extended,
     };
     if !shared.queue.push(event) {
         shared.epoch.fetch_add(1, Ordering::AcqRel);
@@ -221,6 +260,10 @@ fn push(shared: &Shared, kind: EventKind, vk: u32, mods: u8, target: HWND) -> bo
         }
         true
     }
+}
+
+fn push(shared: &Shared, kind: EventKind, vk: u32, mods: u8, target: HWND) -> bool {
+    push_event(shared, kind, vk, mods, target, 0, false)
 }
 
 unsafe extern "system" fn mouse_proc(code: i32, wp: WPARAM, lp: LPARAM) -> LRESULT {
@@ -241,10 +284,12 @@ unsafe extern "system" fn mouse_proc(code: i32, wp: WPARAM, lp: LPARAM) -> LRESU
     if data.flags & LLMHF_INJECTED != 0 {
         return unsafe { CallNextHookEx(std::ptr::null_mut(), code, wp, lp) };
     }
-    if !shared.capture_enabled.load(Ordering::Acquire)
-        || !shared.enabled.load(Ordering::Acquire)
-        || !shared.active.load(Ordering::Acquire)
-    {
+    if !shared.capture_enabled.load(Ordering::Acquire) || !shared.enabled.load(Ordering::Acquire) {
+        return unsafe { CallNextHookEx(std::ptr::null_mut(), code, wp, lp) };
+    }
+
+    invalidate_capability(shared);
+    if !shared.active.load(Ordering::Acquire) {
         return unsafe { CallNextHookEx(std::ptr::null_mut(), code, wp, lp) };
     }
 
@@ -300,6 +345,11 @@ unsafe extern "system" fn keyboard_proc(code: i32, wp: WPARAM, lp: LPARAM) -> LR
     }
 
     let active = shared.active.load(Ordering::Acquire);
+    if !active && (caret_move_key(vk) || shortcut_boundary(mods)) {
+        invalidate_capability(shared);
+        return unsafe { CallNextHookEx(std::ptr::null_mut(), code, wp, lp) };
+    }
+
     if active && vk == VK_SPACE as u32 && mods == INPUT_MOD_SHIFT {
         if push(shared, EventKind::RawBoundary, vk, mods, target) {
             mark_suppressed_up(shared, vk);
@@ -318,15 +368,29 @@ unsafe extern "system" fn keyboard_proc(code: i32, wp: WPARAM, lp: LPARAM) -> LR
 
     if let Some(ch) = printable_char(vk, mods) {
         if active || accepts_char(shared, ch) {
-            if !active
-                && !crate::transport::may_support_text(
-                    target,
-                    shared.automation_ready.load(Ordering::Acquire),
-                )
-            {
-                return unsafe { CallNextHookEx(std::ptr::null_mut(), code, wp, lp) };
+            if !active {
+                let capability = cached_capability(shared, target);
+                if capability == CAPABILITY_UNSUPPORTED {
+                    return unsafe { CallNextHookEx(std::ptr::null_mut(), code, wp, lp) };
+                }
+                if capability != CAPABILITY_SUPPORTED
+                    && !crate::transport::may_support_text(
+                        target,
+                        shared.automation_ready.load(Ordering::Acquire),
+                    )
+                {
+                    return unsafe { CallNextHookEx(std::ptr::null_mut(), code, wp, lp) };
+                }
             }
-            if push(shared, EventKind::Character, vk, mods, target) {
+            if push_event(
+                shared,
+                EventKind::Character,
+                vk,
+                mods,
+                target,
+                data.scanCode as u16,
+                data.flags & LLKHF_EXTENDED != 0,
+            ) {
                 shared.active.store(true, Ordering::Release);
                 shared
                     .active_target
@@ -450,12 +514,17 @@ fn worker(shared: Arc<Shared>, factory: EngineFactory) {
                     if owned.is_none() {
                         match crate::transport::capture(target, automation.as_ref()) {
                             crate::transport::Capture::Ready(transport) => {
+                                set_capability(&shared, target, CAPABILITY_SUPPORTED);
                                 owned = Some(transport);
                             }
                             crate::transport::Capture::Unsupported
                             | crate::transport::Capture::Denied => {
-                                let literal = ch.to_string();
-                                let _ = crate::synthetic::replay_literal(target, &literal);
+                                set_capability(&shared, target, CAPABILITY_UNSUPPORTED);
+                                let _ = crate::synthetic::replay_physical(
+                                    event.vk,
+                                    event.scan_code,
+                                    event.extended,
+                                );
                                 let _ =
                                     engine.dispatch(RootInput::Lifecycle(LifecycleEvent::Reset));
                                 shared.active.store(false, Ordering::Release);
@@ -471,10 +540,14 @@ fn worker(shared: Arc<Shared>, factory: EngineFactory) {
                     {
                         let _ = engine.dispatch(RootInput::Lifecycle(LifecycleEvent::Reset));
                         owned = None;
+                        invalidate_capability(&shared);
                         shared.active.store(false, Ordering::Release);
                         shared.active_target.store(0, Ordering::Release);
-                        let literal = ch.to_string();
-                        let _ = crate::synthetic::replay_literal(target, &literal);
+                        let _ = crate::synthetic::replay_physical(
+                            event.vk,
+                            event.scan_code,
+                            event.extended,
+                        );
                         continue;
                     }
 
@@ -498,6 +571,7 @@ fn worker(shared: Arc<Shared>, factory: EngineFactory) {
                         // event start a fresh composition instead.
                         let _ = engine.dispatch(RootInput::Lifecycle(LifecycleEvent::Reset));
                         owned = None;
+                        invalidate_capability(&shared);
                         shared.active.store(false, Ordering::Release);
                         shared.active_target.store(0, Ordering::Release);
                     } else if remains_active {
@@ -522,7 +596,7 @@ fn worker(shared: Arc<Shared>, factory: EngineFactory) {
                     if !ok {
                         let _ = engine.dispatch(RootInput::Lifecycle(LifecycleEvent::Reset));
                         owned = None;
-                        shared.capture_enabled.store(false, Ordering::Release);
+                        invalidate_capability(&shared);
                         shared.active.store(false, Ordering::Release);
                         shared.active_target.store(0, Ordering::Release);
                     } else if !engine.history_active() {
@@ -666,6 +740,8 @@ pub fn start(config: Config, factory: EngineFactory) -> Result<CompatibilityHand
         enabled: AtomicBool::new(settings.enabled),
         active: AtomicBool::new(false),
         active_target: AtomicUsize::new(0),
+        capability_target: AtomicUsize::new(0),
+        capability_state: AtomicU8::new(CAPABILITY_UNKNOWN),
         epoch: AtomicU64::new(0),
         modifiers: AtomicU8::new(0),
         engine_config: Mutex::new(initial_engine_config),

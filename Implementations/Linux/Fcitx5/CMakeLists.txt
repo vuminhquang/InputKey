@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.16)
-project(inputkey-fcitx5 VERSION 5.2.3 LANGUAGES C CXX)
+project(inputkey-fcitx5 VERSION 5.2.6 LANGUAGES C CXX)
 
 include(GNUInstallDirs)
 find_package(Fcitx5Core REQUIRED)

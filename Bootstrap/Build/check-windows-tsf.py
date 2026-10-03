@@ -61,17 +61,53 @@ if "let _ = composition.EndComposition(ec);" not in service:
 registration = (ROOT / "Implementations" / "WindowsTSF" / "src" / "registration.rs").read_text(encoding="utf-8")
 registrar = (ROOT / "Bootstrap" / "WindowsTSF" / "src" / "bin" / "register.rs").read_text(encoding="utf-8")
 control = (ROOT / "Bootstrap" / "WindowsControl" / "src" / "main.rs").read_text(encoding="utf-8")
+control_ui = (ROOT / "Implementations" / "WindowsControl" / "src" / "win32.rs").read_text(encoding="utf-8")
 build = (ROOT / "Bootstrap" / "Build" / "build-windows.ps1").read_text(encoding="utf-8")
-deploy = (ROOT / "Bootstrap" / "Build" / "deploy-windows-portable.ps1").read_text(encoding="utf-8")
+deploy = (ROOT / "Bootstrap" / "Build" / "deploy-windows-portable.ps1").read_text(encoding="utf-8-sig")
 bootstrap_tsf = (ROOT / "Bootstrap" / "WindowsTSF" / "src" / "lib.rs").read_text(encoding="utf-8")
 
+for label, text in [
+    ("registration", registration),
+    ("registrar", registrar),
+    ("packaged control", control),
+]:
+    for forbidden in [
+        'wide("runas")',
+        "ShellExecuteExW",
+        "HKEY_LOCAL_MACHINE",
+        "HKLM:",
+    ]:
+        if forbidden in text:
+            errors.append(f"{label} violates current-user TSF contract: {forbidden}")
+
 for label, text, required in [
-    ("registration", registration, "bind_text_service_dll"),
+    ("registration", registration, r"Software\Microsoft\CTF\TIP"),
+    ("registration", registration, "HKEY_CURRENT_USER"),
+    ("registration", registration, "text_service_registered"),
+    ("registration", registration, "register_user_tip_state"),
+    ("registration", registration, "unregister_user_tip_state"),
+    ("registration", registration, "REG_DWORD"),
+    ("registration", registration, "register_text_service"),
+    ("registration", registration, ".Register(&CLSID_INPUTKEY_TEXT_SERVICE)"),
+    ("registration", registration, ".AddLanguageProfile("),
+    ("registration", registration, ".RegisterCategory("),
+    ("registration", registration, ".EnableLanguageProfile("),
+    ("registration", registration, "unregister_text_service"),
+    ("registration", registration, ".RemoveLanguageProfile("),
+    ("registration", registration, ".Unregister(&CLSID_INPUTKEY_TEXT_SERVICE)"),
+    ("registration", registration, ".UnregisterCategory("),
+    ("registrar", registrar, "--register-only"),
+    ("registrar", registrar, "--unregister"),
     ("registrar", registrar, "--bind-only"),
-    ("registrar", registrar, '.join("runtime")'),
-    ("packaged control", control, "bind_packaged_text_service"),
+    ("registrar", registrar, "--activate-only"),
+    ("registrar", registrar, "--disable"),
+    ("packaged control", control, "ensure_packaged_text_service"),
+    ("packaged control", control, "register_text_service"),
+    ("packaged control", control, "unregister_text_service"),
+    ("packaged control", control, "install_text_service"),
     ("packaged control", control, "runtime_directory"),
-    ("packaged control", control, "run_registrar"),
+    ("Windows UI", control_ui, "Install Text Service..."),
+    ("Windows UI", control_ui, "Remove Windows integration..."),
     ("Windows build", build, "InputKeyCompatibility.exe"),
     ("Windows build", build, "runtime\\"),
     ("portable deploy", deploy, "legacy_runtimes=preserved"),
@@ -79,7 +115,13 @@ for label, text, required in [
     ("TSF bootstrap", bootstrap_tsf, "tsf_factory_selects_french_language"),
 ]:
     if required not in text:
-        errors.append(f"{label} missing canonical multilingual TSF invariant: {required}")
+        errors.append(f"{label} missing current-user TSF invariant: {required}")
+
+if "let _ = ensure_packaged_text_service();" not in control:
+    errors.append("InputKey startup must automatically register/repair/activate the current-user TSF service")
+
+if "installed_now = !inputkey_windows_tsf::text_service_registered()" not in control:
+    errors.append("Install/Repair Text Service must distinguish a new current-user registration")
 
 if errors:
     print("Windows TSF contract violation:")
@@ -87,4 +129,8 @@ if errors:
         print(f"- {error}")
     sys.exit(1)
 
-print("Windows TSF contract passed: composition-owned text, versioned runtime binding, and side-by-side upgrade invariants are intact.")
+print(
+    "Windows TSF contract passed: TSF remains the primary current-user path, "
+    "InputKey auto-registers/repairs/activates its user-wide profile without elevation, "
+    "and Remove Windows integration can unregister that profile from the user scope."
+)

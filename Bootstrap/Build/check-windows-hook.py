@@ -158,9 +158,43 @@ if not (0 <= native_pos < uia_pos < synthetic_pos):
         "then UI Automation, then synthetic fallback"
     )
 
+if "_automation_ready" in resolver or "|| automation_ready" not in resolver:
+    raise SystemExit(
+        "Windows compatibility check failed: generic HWNDs cannot reach the UI Automation capability probe"
+    )
+
+for required in (
+    "CAPABILITY_UNKNOWN",
+    "CAPABILITY_SUPPORTED",
+    "CAPABILITY_UNSUPPORTED",
+    "set_capability",
+    "invalidate_capability",
+    "replay_physical",
+):
+    if required not in hook:
+        raise SystemExit(
+            "Windows compatibility check failed: compatibility fallback state is missing: "
+            + required
+        )
+
+composition_control = re.search(
+    r"(?s)EventKind::CompositionControl\s*=>\s*\{(.*?)EventKind::RawBoundary",
+    hook,
+)
+if not composition_control:
+    raise SystemExit(
+        "Windows compatibility check failed: CompositionControl branch is missing"
+    )
+if "capture_enabled.store(false" in composition_control.group(1):
+    raise SystemExit(
+        "Windows compatibility check failed: one transport failure disables compatibility globally"
+    )
+
 for required in (
     "SendInput",
     "KEYEVENTF_UNICODE",
+    "KEYEVENTF_SCANCODE",
+    "replay_physical",
     "GetForegroundWindow",
     "GetAncestor",
     "INPUTKEY_SYNTHETIC_TAG",

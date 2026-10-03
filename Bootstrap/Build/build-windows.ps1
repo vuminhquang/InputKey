@@ -27,7 +27,7 @@ try {
     cargo test -p inputkey-windows-settings -p inputkey-windows-clipboard -p inputkey-windows-hook -p inputkey-windows-control -p inputkey-windows-tsf -p inputkey-windows-tsf-bootstrap -p inputkey-windows-control-bootstrap
     if ($LASTEXITCODE) { throw "Windows tests failed" }
 
-    cargo build --release --target-dir $Target -p inputkey-windows-control-bootstrap --bin InputKey --bin InputKeyStartup --bin InputKeyCompatibility
+    cargo build --release --target-dir $Target -p inputkey-windows-control-bootstrap --bin InputKey --bin InputKeyCompatibility
     if ($LASTEXITCODE) { throw "Windows control release build failed" }
 
     cargo build --release --target-dir $Target -p inputkey-windows-tsf-bootstrap --lib --bin InputKeyTSFRegister
@@ -39,7 +39,6 @@ try {
     if (Test-Path $Stage) { Remove-Item $Stage -Recurse -Force }
     New-Item -ItemType Directory -Force $Stage | Out-Null
     Copy-Item (Join-Path $Target "release\InputKey.exe") $Stage
-    Copy-Item (Join-Path $Target "release\InputKeyStartup.exe") $Stage
     Copy-Item (Join-Path $Target "release\InputKeyCompatibility.exe") $Stage
     Copy-Item (Join-Path $Target "release\InputKeyTSFRegister.exe") $Stage
     Copy-Item "Implementations\WindowsHook\inputkey-v.ico" $Stage

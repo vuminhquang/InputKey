@@ -3,13 +3,12 @@ $Root = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
 $Version = (Get-Content (Join-Path $Root "VERSION") -Raw).Trim()
 $PackageRoot = Join-Path $Root "dist\InputKey-Windows-$Version"
 $Exe = Join-Path $PackageRoot "InputKey.exe"
-$StartupHelper = Join-Path $PackageRoot "InputKeyStartup.exe"
 $CompatibilityHelper = Join-Path $PackageRoot "InputKeyCompatibility.exe"
 $Registrar = Join-Path $PackageRoot "InputKeyTSFRegister.exe"
 $Runtime = Join-Path $PackageRoot ("runtime\" + $Version)
 $Dll = Join-Path $Runtime "InputKeyTSF.dll"
 
-foreach ($required in @($Exe, $StartupHelper, $CompatibilityHelper, $Registrar, $Dll)) {
+foreach ($required in @($Exe, $CompatibilityHelper, $Registrar, $Dll)) {
     if (-not (Test-Path -LiteralPath $required)) {
         throw "Missing packaged Windows runtime file: $required"
     }
@@ -36,18 +35,20 @@ Get-Process InputKey,InputKeyCompatibility -ErrorAction SilentlyContinue | ForEa
 $restartPaths = @($restartPaths | Select-Object -Unique)
 
 $RunPath = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run"
-$runBefore = $null
+$runProps = if (Test-Path $RunPath) { Get-ItemProperty $RunPath -ErrorAction SilentlyContinue } else { $null }
+$runBefore = if ($null -ne $runProps) { $runProps.InputKey } else { $null }
+$legacyRunBefore = if ($null -ne $runProps) { $runProps.VietnameseKeyboard } else { $null }
 if (Test-Path $RunPath) {
-    $runBefore = (Get-ItemProperty $RunPath -ErrorAction SilentlyContinue).InputKey
+    Remove-ItemProperty -Path $RunPath -Name InputKey -ErrorAction SilentlyContinue
+    Remove-ItemProperty -Path $RunPath -Name VietnameseKeyboard -ErrorAction SilentlyContinue
 }
 
 $StartupShortcut = Join-Path $env:APPDATA "Microsoft\Windows\Start Menu\Programs\Startup\InputKey.lnk"
 $StartupBackup = Join-Path $env:TEMP ("InputKey-startup-backup-" + $PID + ".lnk")
 $shortcutBeforeExists = Test-Path -LiteralPath $StartupShortcut
-$shortcutBeforeHash = $null
 if ($shortcutBeforeExists) {
     Copy-Item -LiteralPath $StartupShortcut -Destination $StartupBackup -Force
-    $shortcutBeforeHash = (Get-FileHash -LiteralPath $StartupShortcut -Algorithm SHA256).Hash
+    Remove-Item -LiteralPath $StartupShortcut -Force
 }
 
 $Inproc = "HKCU:\Software\Classes\CLSID\{5F4A4C92-85B3-4F69-A6BC-B427D51D5E50}\InprocServer32"
@@ -56,6 +57,9 @@ function Read-TsfBinding {
     return (Get-ItemProperty $Inproc -ErrorAction SilentlyContinue).'(default)'
 }
 $bindingBefore = Read-TsfBinding
+$statusBefore = (& $Registrar --status 2>&1 | Out-String).Trim()
+$registeredBefore = $statusBefore -match "registered=true"
+$activeBefore = $statusBefore -match "active=true"
 
 $SettingsPath = "HKCU:\Software\InputKey\Settings"
 $settingsExisted = Test-Path $SettingsPath
@@ -111,42 +115,56 @@ try {
         throw "InputKeyCompatibility did not start beside the control process."
     }
 
-    $runAfter = $null
-    if (Test-Path $RunPath) {
-        $runAfter = (Get-ItemProperty $RunPath -ErrorAction SilentlyContinue).InputKey
+    $runAfter = if (Test-Path $RunPath) { (Get-ItemProperty $RunPath -ErrorAction SilentlyContinue).InputKey } else { $null }
+    if ($null -ne $runAfter) {
+        throw "Persistence regression: normal InputKey startup changed the Run entry."
     }
-    if ([string]$runAfter -ne [string]$runBefore) {
-        throw "Persistence regression: normal InputKey startup changed the legacy Run entry."
-    }
-
-    $shortcutAfterExists = Test-Path -LiteralPath $StartupShortcut
-    if ($shortcutAfterExists -ne $shortcutBeforeExists) {
-        throw "Persistence regression: normal InputKey startup changed the Startup shortcut."
-    }
-    if ($shortcutBeforeExists) {
-        $shortcutAfterHash = (Get-FileHash -LiteralPath $StartupShortcut -Algorithm SHA256).Hash
-        if ($shortcutAfterHash -ne $shortcutBeforeHash) {
-            throw "Persistence regression: normal InputKey startup rewrote the Startup shortcut."
-        }
+    if (Test-Path -LiteralPath $StartupShortcut) {
+        throw "Persistence regression: normal InputKey startup created a Startup shortcut."
     }
 
     $bindingAfter = Read-TsfBinding
-    if ([string]$bindingAfter -ne [string]$bindingBefore) {
-        throw "TSF startup regression: normal InputKey startup rebound COM from '$bindingBefore' to '$bindingAfter'."
+    if ([IO.Path]::GetFullPath([string]$bindingAfter) -ne [IO.Path]::GetFullPath($Dll)) {
+        throw "TSF startup regression: InputKey did not repair the current-user COM binding to '$Dll'. Actual: '$bindingAfter'."
+    }
+    $statusAfter = (& $Registrar --status 2>&1 | Out-String).Trim()
+    foreach ($required in @("registered=true", "available=true", "active=true", "bound=true")) {
+        if ($statusAfter -notmatch [regex]::Escape($required)) {
+            throw "TSF startup regression: expected '$required' after automatic registration/activation. Status: $statusAfter"
+        }
     }
 
-    $enable = Start-Process -FilePath $StartupHelper -ArgumentList @('--enable', '--exe', ('"' + $Exe + '"')) -PassThru -Wait
-    if ($enable.ExitCode -ne 0) { throw "InputKeyStartup explicit enable failed." }
-    $status = Start-Process -FilePath $StartupHelper -ArgumentList @('--status', '--exe', ('"' + $Exe + '"')) -PassThru -Wait
-    if ($status.ExitCode -ne 0) { throw "InputKeyStartup explicit status failed after enable." }
-    if (-not (Test-Path -LiteralPath $StartupShortcut)) { throw "InputKeyStartup did not create InputKey.lnk." }
-    $runAfterHelper = if (Test-Path $RunPath) { (Get-ItemProperty $RunPath -ErrorAction SilentlyContinue).InputKey } else { $null }
-    if ([string]$runAfterHelper -ne [string]$runBefore) {
-        throw "Persistence regression: explicit helper wrote the legacy Run entry."
+    if (-not [InputKeyWindowProbe]::PostMessage($window, 0x0111, [IntPtr]106, [IntPtr]::Zero)) {
+        throw "Could not invoke Start with Windows."
     }
-    $disable = Start-Process -FilePath $StartupHelper -ArgumentList @('--disable') -PassThru -Wait
-    if ($disable.ExitCode -ne 0) { throw "InputKeyStartup explicit disable failed." }
-    if (Test-Path -LiteralPath $StartupShortcut) { throw "InputKeyStartup did not remove InputKey.lnk." }
+    $deadline = [DateTime]::UtcNow.AddSeconds(3)
+    $expectedRun = '"' + $Exe + '"'
+    $runEnabled = $null
+    while ([DateTime]::UtcNow -lt $deadline) {
+        $runEnabled = if (Test-Path $RunPath) { (Get-ItemProperty $RunPath -ErrorAction SilentlyContinue).InputKey } else { $null }
+        if ([string]$runEnabled -eq $expectedRun) { break }
+        Start-Sleep -Milliseconds 50
+    }
+    if ([string]$runEnabled -ne $expectedRun) {
+        throw "Start with Windows did not write the expected HKCU Run value."
+    }
+    if (Test-Path -LiteralPath $StartupShortcut) {
+        throw "Start with Windows recreated the obsolete Startup shortcut."
+    }
+
+    if (-not [InputKeyWindowProbe]::PostMessage($window, 0x0111, [IntPtr]106, [IntPtr]::Zero)) {
+        throw "Could not disable Start with Windows."
+    }
+    $deadline = [DateTime]::UtcNow.AddSeconds(3)
+    $runDisabled = $runEnabled
+    while ([DateTime]::UtcNow -lt $deadline) {
+        $runDisabled = if (Test-Path $RunPath) { (Get-ItemProperty $RunPath -ErrorAction SilentlyContinue).InputKey } else { $null }
+        if ($null -eq $runDisabled) { break }
+        Start-Sleep -Milliseconds 50
+    }
+    if ($null -ne $runDisabled) {
+        throw "Start with Windows did not remove the HKCU Run value."
+    }
 
     if (-not [InputKeyWindowProbe]::PostMessage($window, 0x0010, [IntPtr]::Zero, [IntPtr]::Zero)) {
         throw "Could not send WM_CLOSE to InputKeyControlWindow."
@@ -187,6 +205,32 @@ try {
         Copy-Item -LiteralPath $StartupBackup -Destination $StartupShortcut -Force
     }
     Remove-Item -LiteralPath $StartupBackup -Force -ErrorAction SilentlyContinue
+
+    if (-not (Test-Path $RunPath)) { New-Item -Path $RunPath -Force | Out-Null }
+    if ($null -ne $runBefore) {
+        Set-ItemProperty -Path $RunPath -Name InputKey -Type String -Value $runBefore
+    } else {
+        Remove-ItemProperty -Path $RunPath -Name InputKey -ErrorAction SilentlyContinue
+    }
+    if ($null -ne $legacyRunBefore) {
+        Set-ItemProperty -Path $RunPath -Name VietnameseKeyboard -Type String -Value $legacyRunBefore
+    } else {
+        Remove-ItemProperty -Path $RunPath -Name VietnameseKeyboard -ErrorAction SilentlyContinue
+    }
+
+    if ($registeredBefore) {
+        if ($bindingBefore -and (Test-Path -LiteralPath $bindingBefore)) {
+            & $Registrar --bind-only --dll $bindingBefore | Out-Null
+        }
+        if ($activeBefore) {
+            & $Registrar --activate-only | Out-Null
+        } else {
+            & $Registrar --disable | Out-Null
+        }
+    } else {
+        & $Registrar --disable | Out-Null
+        & $Registrar --unregister | Out-Null
+    }
 
     if ($settingsExisted) {
         if (-not (Test-Path $SettingsPath)) { New-Item -Path $SettingsPath -Force | Out-Null }

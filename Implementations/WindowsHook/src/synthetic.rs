@@ -2,8 +2,8 @@ use windows_sys::Win32::{
     Foundation::HWND,
     UI::{
         Input::KeyboardAndMouse::{
-            SendInput, INPUT, INPUT_0, INPUT_KEYBOARD, KEYBDINPUT, KEYEVENTF_KEYUP,
-            KEYEVENTF_UNICODE, VK_BACK,
+            SendInput, INPUT, INPUT_0, INPUT_KEYBOARD, KEYBDINPUT, KEYEVENTF_EXTENDEDKEY,
+            KEYEVENTF_KEYUP, KEYEVENTF_SCANCODE, KEYEVENTF_UNICODE, VK_BACK,
         },
         WindowsAndMessaging::{GetAncestor, GetForegroundWindow, IsWindow, GA_ROOT},
     },
@@ -83,8 +83,51 @@ impl OwnedSynthetic {
     }
 }
 
-pub fn replay_literal(target: HWND, text: &str) -> bool {
-    OwnedSynthetic::capture(target).is_some_and(|owned| owned.replace("", text).is_ok())
+pub fn replay_physical(vk: u16, scan_code: u16, extended: bool) -> bool {
+    let mut down_flags = 0u32;
+    let (w_vk, w_scan) = if scan_code != 0 {
+        down_flags |= KEYEVENTF_SCANCODE;
+        (0, scan_code)
+    } else {
+        (vk, 0)
+    };
+    if extended {
+        down_flags |= KEYEVENTF_EXTENDEDKEY;
+    }
+
+    let inputs = [
+        INPUT {
+            r#type: INPUT_KEYBOARD,
+            Anonymous: INPUT_0 {
+                ki: KEYBDINPUT {
+                    wVk: w_vk,
+                    wScan: w_scan,
+                    dwFlags: down_flags,
+                    time: 0,
+                    dwExtraInfo: INPUTKEY_SYNTHETIC_TAG,
+                },
+            },
+        },
+        INPUT {
+            r#type: INPUT_KEYBOARD,
+            Anonymous: INPUT_0 {
+                ki: KEYBDINPUT {
+                    wVk: w_vk,
+                    wScan: w_scan,
+                    dwFlags: down_flags | KEYEVENTF_KEYUP,
+                    time: 0,
+                    dwExtraInfo: INPUTKEY_SYNTHETIC_TAG,
+                },
+            },
+        },
+    ];
+    unsafe {
+        SendInput(
+            inputs.len() as u32,
+            inputs.as_ptr(),
+            std::mem::size_of::<INPUT>() as i32,
+        ) == inputs.len() as u32
+    }
 }
 
 pub fn root_window(target: HWND) -> HWND {

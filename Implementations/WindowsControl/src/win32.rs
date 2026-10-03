@@ -300,9 +300,7 @@ unsafe fn show_menu(hwnd: HWND) {
             wide("Remove Windows integration...").as_ptr(),
         );
         AppendMenuW(menu, MF_SEPARATOR, 0, std::ptr::null());
-        let startup_enabled = ACTIONS
-            .get()
-            .is_some_and(|actions| (actions.startup_enabled)());
+        let startup_enabled = crate::startup::is_enabled();
         AppendMenuW(
             menu,
             MF_STRING | checked(startup_enabled),
@@ -345,7 +343,7 @@ fn turn_off_and_notify(hwnd: HWND) {
 
 unsafe fn remove_windows_integration(hwnd: HWND) {
     let title = wide("Remove InputKey from Windows");
-    let prompt = wide("This turns InputKey off, removes Start with Windows, unregisters the InputKey Text Service, and exits the tray app. The portable folder itself is not deleted.\n\nAlready-open applications may keep their already-loaded InputKey runtime until they are closed. Continue?");
+    let prompt = wide("This turns InputKey off, removes Start with Windows, unregisters the current user's InputKey Text Service profile/COM binding, and exits the tray app. The portable folder itself is not deleted.\n\nAlready-open applications may keep their loaded InputKey runtime until they close. Continue?");
     let answer = unsafe {
         MessageBoxW(
             hwnd,
@@ -360,10 +358,11 @@ unsafe fn remove_windows_integration(hwnd: HWND) {
 
     turn_off_and_notify(hwnd);
 
-    let removed = ACTIONS.get().is_some_and(|actions| {
-        let startup_removed = !(actions.startup_enabled)() || (actions.set_startup_enabled)(false);
-        startup_removed && (actions.remove_windows_integration)()
-    });
+    let startup_removed = crate::startup::set_enabled(false);
+    let removed = startup_removed
+        && ACTIONS
+            .get()
+            .is_some_and(|actions| (actions.remove_windows_integration)());
     if removed {
         let message = wide("Windows integration was removed. You can move or delete the portable InputKey folder after closing applications that may still have InputKeyTSF.dll loaded.");
         unsafe {
@@ -463,10 +462,8 @@ unsafe extern "system" fn window_proc(
                     save_and_notify(current, hwnd);
                 }
                 ID_STARTUP => {
-                    if let Some(actions) = ACTIONS.get() {
-                        let enabled = (actions.startup_enabled)();
-                        let _ = (actions.set_startup_enabled)(!enabled);
-                    }
+                    let enabled = crate::startup::is_enabled();
+                    let _ = crate::startup::set_enabled(!enabled);
                 }
                 ID_INSTALL_TSF => {
                     if let Some(actions) = ACTIONS.get() {

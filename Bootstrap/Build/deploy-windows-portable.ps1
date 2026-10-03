@@ -1,4 +1,4 @@
-﻿param(
+param(
     [Parameter(Mandatory = $true)][string]$Package,
     [Parameter(Mandatory = $true)][string]$Destination
 )
@@ -42,7 +42,6 @@ try {
     $RuntimeSource = Join-Path $Stage ("runtime\" + $Version)
     $Required = @(
         (Join-Path $Stage "InputKey.exe"),
-        (Join-Path $Stage "InputKeyStartup.exe"),
         (Join-Path $Stage "InputKeyCompatibility.exe"),
         (Join-Path $Stage "InputKeyTSFRegister.exe"),
         (Join-Path $RuntimeSource "InputKeyTSF.dll"),
@@ -68,8 +67,8 @@ try {
     }
 
     $DestinationExe = Join-Path $Destination "InputKey.exe"
-
     $DestinationCompatibility = Join-Path $Destination "InputKeyCompatibility.exe"
+
     foreach ($processName in @("InputKey", "InputKeyCompatibility")) {
         Get-Process $processName -ErrorAction SilentlyContinue | ForEach-Object {
             try {
@@ -84,7 +83,10 @@ try {
         }
     }
 
-    foreach ($Name in @("InputKey.exe", "InputKeyStartup.exe", "InputKeyCompatibility.exe", "InputKeyTSFRegister.exe", "inputkey-v.ico", "inputkey-e.ico", "VERSION")) {
+    $ObsoleteStartupHelper = Join-Path $Destination "InputKeyStartup.exe"
+    Remove-Item -LiteralPath $ObsoleteStartupHelper -Force -ErrorAction SilentlyContinue
+
+    foreach ($Name in @("InputKey.exe", "InputKeyCompatibility.exe", "InputKeyTSFRegister.exe", "inputkey-v.ico", "inputkey-e.ico", "VERSION")) {
         $Source = Join-Path $Stage $Name
         if (-not (Test-Path $Source)) { continue }
         $Target = Join-Path $Destination $Name

@@ -6,8 +6,6 @@ pub struct ControlActions {
     pub settings_changed: Arc<dyn Fn() + Send + Sync + 'static>,
     pub languages: Arc<dyn Fn() -> Vec<LanguageMetadata> + Send + Sync + 'static>,
     pub install_text_service: Arc<dyn Fn() + Send + Sync + 'static>,
-    pub startup_enabled: Arc<dyn Fn() -> bool + Send + Sync + 'static>,
-    pub set_startup_enabled: Arc<dyn Fn(bool) -> bool + Send + Sync + 'static>,
     pub remove_windows_integration: Arc<dyn Fn() -> bool + Send + Sync + 'static>,
     pub text_service_available: Arc<dyn Fn() -> bool + Send + Sync + 'static>,
     pub text_service_active: Arc<dyn Fn() -> bool + Send + Sync + 'static>,
@@ -15,6 +13,8 @@ pub struct ControlActions {
 
 #[cfg(windows)]
 mod settings_window;
+#[cfg(windows)]
+mod startup;
 #[cfg(windows)]
 mod toggle_shortcut;
 #[cfg(windows)]

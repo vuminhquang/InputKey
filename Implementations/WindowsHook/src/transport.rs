@@ -151,8 +151,8 @@ pub fn thread_has_tsf(target: HWND) -> bool {
     }
 }
 
-/// Cheap hook-thread test. Rich capability probing stays on the worker thread.
-pub fn may_support_text(target: HWND, _automation_ready: bool) -> bool {
+/// Cheap hook-thread admission. Rich capability probing stays on the worker thread.
+pub fn may_support_text(target: HWND, automation_ready: bool) -> bool {
     if target.is_null() || unsafe { IsWindow(target) } == 0 || thread_has_tsf(target) {
         return false;
     }
@@ -160,7 +160,10 @@ pub fn may_support_text(target: HWND, _automation_ready: bool) -> bool {
         return true;
     }
     let class = class_name(target);
-    native::is_edit_class(&class) || is_chromium_surface(target) || is_automation_surface(target)
+    native::is_edit_class(&class)
+        || is_chromium_surface(target)
+        || is_automation_surface(target)
+        || automation_ready
 }
 
 /// Worker-thread capability resolver. It chooses by supported text capability,
@@ -182,9 +185,14 @@ pub fn capture(target: HWND, automation: Option<&uia::AutomationText>) -> Captur
     }
 
     if native::is_edit_class(&class_name(target)) {
-        return native::OwnedRange::capture(target)
-            .map(|range| Capture::Ready(OwnedTransport::Native(range)))
-            .unwrap_or(Capture::Denied);
+        match native::OwnedRange::capture(target) {
+            Ok(range) => return Capture::Ready(OwnedTransport::Native(range)),
+            Err(native::CaptureError::Denied) => return Capture::Denied,
+            Err(native::CaptureError::Unsupported) => {
+                // A native-looking control can still expose a usable UI Automation
+                // capability. Continue probing instead of ending the resolver here.
+            }
+        }
     }
 
     let mut keyboard_text_surface = false;

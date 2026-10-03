@@ -1,5 +1,6 @@
 use crate::{
-    CLSID_INPUTKEY_STR, CLSID_INPUTKEY_TEXT_SERVICE, GUID_INPUTKEY_PROFILE, INPUTKEY_LANGID,
+    CLSID_INPUTKEY_STR, CLSID_INPUTKEY_TEXT_SERVICE, GUID_INPUTKEY_PROFILE,
+    GUID_INPUTKEY_PROFILE_STR, INPUTKEY_LANGID,
 };
 use std::path::Path;
 use windows::{
@@ -10,7 +11,7 @@ use windows::{
             Com::{CoCreateInstance, CLSCTX_INPROC_SERVER},
             Registry::{
                 RegCloseKey, RegCreateKeyExW, RegDeleteTreeW, RegOpenKeyExW, RegSetValueExW, HKEY,
-                HKEY_CURRENT_USER, KEY_READ, KEY_WRITE, REG_OPTION_NON_VOLATILE, REG_SZ,
+                HKEY_CURRENT_USER, KEY_READ, KEY_WRITE, REG_DWORD, REG_OPTION_NON_VOLATILE, REG_SZ,
             },
         },
         UI::{
@@ -57,6 +58,27 @@ fn create_key(path: &str) -> Result<HKEY> {
     Ok(key)
 }
 
+fn key_exists(path: &str) -> bool {
+    let path = wide_nul(path);
+    let mut key = HKEY::default();
+    let code = unsafe {
+        RegOpenKeyExW(
+            HKEY_CURRENT_USER,
+            PCWSTR(path.as_ptr()),
+            None,
+            KEY_READ,
+            &mut key,
+        )
+    };
+    if code != ERROR_SUCCESS {
+        return false;
+    }
+    unsafe {
+        let _ = RegCloseKey(key);
+    }
+    true
+}
+
 fn set_default_sz(key: HKEY, value: &str) -> Result<()> {
     let value = wide_nul(value);
     let bytes = unsafe {
@@ -72,6 +94,29 @@ fn set_named_sz(key: HKEY, name: &str, value: &str) -> Result<()> {
         std::slice::from_raw_parts(value.as_ptr().cast::<u8>(), value.len() * size_of::<u16>())
     };
     win32_result(unsafe { RegSetValueExW(key, PCWSTR(name.as_ptr()), None, REG_SZ, Some(bytes)) })
+}
+
+fn set_named_dword(key: HKEY, name: &str, value: u32) -> Result<()> {
+    let name = wide_nul(name);
+    let bytes = value.to_ne_bytes();
+    win32_result(unsafe {
+        RegSetValueExW(key, PCWSTR(name.as_ptr()), None, REG_DWORD, Some(&bytes))
+    })
+}
+
+fn user_profile_path() -> String {
+    format!(
+        r"Software\Microsoft\CTF\TIP\{CLSID_INPUTKEY_STR}\LanguageProfile\0x{INPUTKEY_LANGID:08X}\{GUID_INPUTKEY_PROFILE_STR}"
+    )
+}
+
+fn register_user_tip_state() -> Result<()> {
+    let key = create_key(&user_profile_path())?;
+    let result = set_named_dword(key, "Enable", 1);
+    unsafe {
+        let _ = RegCloseKey(key);
+    }
+    result
 }
 
 fn register_com_class(dll_path: &Path) -> Result<()> {
@@ -94,34 +139,6 @@ fn register_com_class(dll_path: &Path) -> Result<()> {
     result
 }
 
-pub fn text_service_registered() -> bool {
-    let path = wide_nul(&format!(
-        r"Software\Classes\CLSID\{CLSID_INPUTKEY_STR}\InprocServer32"
-    ));
-    let mut key = HKEY::default();
-    let code = unsafe {
-        RegOpenKeyExW(
-            HKEY_CURRENT_USER,
-            PCWSTR(path.as_ptr()),
-            None,
-            KEY_READ,
-            &mut key,
-        )
-    };
-    if code == ERROR_SUCCESS {
-        unsafe {
-            let _ = RegCloseKey(key);
-        }
-        true
-    } else {
-        false
-    }
-}
-
-pub fn bind_text_service_dll(dll_path: &Path) -> Result<()> {
-    register_com_class(dll_path)
-}
-
 fn unregister_com_class() -> Result<()> {
     let path = wide_nul(&format!(r"Software\Classes\CLSID\{CLSID_INPUTKEY_STR}"));
     let code = unsafe { RegDeleteTreeW(HKEY_CURRENT_USER, PCWSTR(path.as_ptr())) };
@@ -130,6 +147,30 @@ fn unregister_com_class() -> Result<()> {
     } else {
         win32_result(code)
     }
+}
+
+fn unregister_user_tip_state() -> Result<()> {
+    let path = wide_nul(&format!(r"Software\Microsoft\CTF\TIP\{CLSID_INPUTKEY_STR}"));
+    let code = unsafe { RegDeleteTreeW(HKEY_CURRENT_USER, PCWSTR(path.as_ptr())) };
+    if code == ERROR_SUCCESS || code.0 == 2 {
+        Ok(())
+    } else {
+        win32_result(code)
+    }
+}
+
+pub fn text_service_registered() -> bool {
+    key_exists(&user_profile_path())
+}
+
+pub fn text_service_bound() -> bool {
+    key_exists(&format!(
+        r"Software\Classes\CLSID\{CLSID_INPUTKEY_STR}\InprocServer32"
+    ))
+}
+
+pub fn bind_text_service_dll(dll_path: &Path) -> Result<()> {
+    register_com_class(dll_path)
 }
 
 unsafe fn profiles() -> Result<ITfInputProcessorProfiles> {
@@ -148,22 +189,72 @@ pub fn register_text_service(dll_path: &Path) -> Result<()> {
     register_com_class(dll_path)?;
 
     let profiles = unsafe { profiles()? };
-    unsafe {
-        profiles
-            .Register(&CLSID_INPUTKEY_TEXT_SERVICE)
-            .map_err(|e| Error::new(e.code(), "TSF Register text service"))?;
-        let desc: Vec<u16> = "InputKey".encode_utf16().collect();
-        let icon: Vec<u16> = Vec::new();
-        profiles
-            .AddLanguageProfile(
+    if !text_service_registered() {
+        unsafe {
+            let _ = profiles.Register(&CLSID_INPUTKEY_TEXT_SERVICE);
+
+            let desc: Vec<u16> = "InputKey".encode_utf16().collect();
+            let icon: Vec<u16> = Vec::new();
+            let _ = profiles.AddLanguageProfile(
                 &CLSID_INPUTKEY_TEXT_SERVICE,
                 INPUTKEY_LANGID,
                 &GUID_INPUTKEY_PROFILE,
                 &desc,
                 &icon,
                 0,
-            )
-            .map_err(|e| Error::new(e.code(), "TSF AddLanguageProfile"))?;
+            );
+        }
+
+        if !text_service_registered() {
+            let manager = unsafe { profile_manager()? };
+            let desc: Vec<u16> = "InputKey".encode_utf16().collect();
+            let icon: Vec<u16> = Vec::new();
+            unsafe {
+                let _ = manager.RegisterProfile(
+                    &CLSID_INPUTKEY_TEXT_SERVICE,
+                    INPUTKEY_LANGID,
+                    &GUID_INPUTKEY_PROFILE,
+                    &desc,
+                    &icon,
+                    0,
+                    HKL::default(),
+                    0,
+                    true,
+                    0,
+                );
+            }
+        }
+
+        if !text_service_registered() {
+            register_user_tip_state()?;
+        }
+
+        if !text_service_registered() {
+            return Err(Error::new(
+                HRESULT(0x80004005u32 as i32),
+                "TSF current-user profile registration did not materialize",
+            ));
+        }
+
+        if let Ok(categories) = unsafe { categories() } {
+            for category in [
+                GUID_TFCAT_TIP_KEYBOARD,
+                GUID_TFCAT_TIPCAP_IMMERSIVESUPPORT,
+                GUID_TFCAT_TIPCAP_SYSTRAYSUPPORT,
+                GUID_TFCAT_TIPCAP_TSF3,
+            ] {
+                unsafe {
+                    let _ = categories.RegisterCategory(
+                        &CLSID_INPUTKEY_TEXT_SERVICE,
+                        &category,
+                        &CLSID_INPUTKEY_TEXT_SERVICE,
+                    );
+                }
+            }
+        }
+    }
+
+    unsafe {
         profiles
             .EnableLanguageProfile(
                 &CLSID_INPUTKEY_TEXT_SERVICE,
@@ -174,27 +265,20 @@ pub fn register_text_service(dll_path: &Path) -> Result<()> {
             .map_err(|e| Error::new(e.code(), "TSF EnableLanguageProfile"))?;
     }
 
-    let categories = unsafe { categories()? };
-    for category in [
-        GUID_TFCAT_TIP_KEYBOARD,
-        GUID_TFCAT_TIPCAP_IMMERSIVESUPPORT,
-        GUID_TFCAT_TIPCAP_SYSTRAYSUPPORT,
-        GUID_TFCAT_TIPCAP_TSF3,
-    ] {
-        unsafe {
-            categories
-                .RegisterCategory(
-                    &CLSID_INPUTKEY_TEXT_SERVICE,
-                    &category,
-                    &CLSID_INPUTKEY_TEXT_SERVICE,
-                )
-                .map_err(|e| Error::new(e.code(), "TSF RegisterCategory"))?;
-        }
+    if text_service_available() {
+        Ok(())
+    } else {
+        Err(Error::new(
+            HRESULT(0x80004005u32 as i32),
+            "TSF current-user profile is not enabled after registration",
+        ))
     }
-    Ok(())
 }
 
 pub fn text_service_available() -> bool {
+    if !text_service_registered() {
+        return false;
+    }
     let Ok(profiles) = (unsafe { profiles() }) else {
         return false;
     };
@@ -239,6 +323,10 @@ pub fn activate_text_service() -> Result<()> {
 }
 
 pub fn disable_text_service() -> Result<()> {
+    if !text_service_registered() {
+        return Ok(());
+    }
+
     if let Ok(manager) = unsafe { profile_manager() } {
         unsafe {
             let _ = manager.DeactivateProfile(
@@ -264,6 +352,17 @@ pub fn disable_text_service() -> Result<()> {
 }
 
 pub fn unregister_text_service() -> Result<()> {
+    if let Ok(manager) = unsafe { profile_manager() } {
+        unsafe {
+            let _ = manager.UnregisterProfile(
+                &CLSID_INPUTKEY_TEXT_SERVICE,
+                INPUTKEY_LANGID,
+                &GUID_INPUTKEY_PROFILE,
+                0,
+            );
+        }
+    }
+
     if let Ok(categories) = unsafe { categories() } {
         for category in [
             GUID_TFCAT_TIP_KEYBOARD,
@@ -292,5 +391,6 @@ pub fn unregister_text_service() -> Result<()> {
         }
     }
 
+    unregister_user_tip_state()?;
     unregister_com_class()
 }

@@ -5,78 +5,105 @@ ROOT = Path(__file__).resolve().parents[2]
 CONTROL_IMPL = ROOT / "Implementations" / "WindowsControl"
 BOOTSTRAP = ROOT / "Bootstrap" / "WindowsControl"
 MAIN = BOOTSTRAP / "src" / "main.rs"
-HELPER = BOOTSTRAP / "src" / "bin" / "startup.rs"
+STARTUP = CONTROL_IMPL / "src" / "startup.rs"
 CONTROL = CONTROL_IMPL / "src" / "win32.rs"
+BOOT_CARGO = BOOTSTRAP / "Cargo.toml"
 BUILD = ROOT / "Bootstrap" / "Build" / "build-windows.ps1"
 DEPLOY = ROOT / "Bootstrap" / "Build" / "deploy-windows-portable.ps1"
 
 errors: list[str] = []
 
-for source in list(CONTROL_IMPL.rglob("*.rs")) + [MAIN]:
-    text = source.read_text(encoding="utf-8")
-    for forbidden in [
-        "CurrentVersion\\Run",
-        "RegSetValueExW",
-        "RegCreateKeyExW",
-        "RegDeleteValueW",
-        "IShellLinkW",
-        "InputKey.lnk",
-    ]:
-        if forbidden in text:
-            errors.append(
-                f"{source.relative_to(ROOT)} embeds startup persistence primitive {forbidden}"
-            )
+user_scope_roots = [
+    BOOTSTRAP / "src",
+    ROOT / "Bootstrap" / "WindowsTSF" / "src",
+    CONTROL_IMPL / "src",
+    ROOT / "Implementations" / "WindowsTSF" / "src",
+]
+for scope in user_scope_roots:
+    for source in scope.rglob("*.rs"):
+        text = source.read_text(encoding="utf-8-sig")
+        for forbidden in [
+            'wide("runas")',
+            "HKEY_LOCAL_MACHINE",
+            "HKLM:",
+            "requireAdministrator",
+            "highestAvailable",
+        ]:
+            if forbidden in text:
+                errors.append(
+                    f"{source.relative_to(ROOT)} violates user-only Windows scope: {forbidden}"
+                )
 
-if not HELPER.exists():
-    errors.append("startup helper source is missing")
-    helper = ""
+if not STARTUP.exists():
+    errors.append("Windows startup implementation is missing")
+    startup = ""
 else:
-    helper = HELPER.read_text(encoding="utf-8")
+    startup = STARTUP.read_text(encoding="utf-8")
 
 for required in [
-    "IShellLinkW",
-    "InputKey.lnk",
-    'join("Startup")',
-    'arg == "--enable"',
-    'arg == "--disable"',
-    'arg == "--status"',
+    r"Software\Microsoft\Windows\CurrentVersion\Run",
+    "HKEY_CURRENT_USER",
+    "RegSetValueExW",
+    "RegCreateKeyExW",
+    "RegDeleteValueW",
+    'const VALUE_NAME: &str = "InputKey"',
+    'const LEGACY_VALUE_NAME: &str = "VietnameseKeyboard"',
+    "remove_stale_shortcut",
 ]:
-    if required not in helper:
-        errors.append(f"startup helper missing explicit persistence contract: {required}")
+    if required not in startup:
+        errors.append(f"direct HKCU Run startup contract missing: {required}")
 
-for forbidden in ["CurrentVersion\\Run", "RegSetValueExW", "RegCreateKeyExW", "RegDeleteValueW"]:
-    if forbidden in helper:
-        errors.append(
-            f"startup helper must use the Startup shortcut instead of legacy Run-key primitive {forbidden}"
-        )
+for forbidden in ["IShellLinkW", "ShellLink", "persist.Save(", "HKEY_LOCAL_MACHINE"]:
+    if forbidden in startup:
+        errors.append(f"startup persistence must remain user-only: {forbidden}")
 
 control = CONTROL.read_text(encoding="utf-8")
-for required in ["ID_STARTUP", 'wide("Start with Windows")', "startup_enabled", "set_startup_enabled"]:
+for required in [
+    "ID_STARTUP",
+    'wide("Start with Windows")',
+    "crate::startup::is_enabled()",
+    "crate::startup::set_enabled(!enabled)",
+]:
     if required not in control:
         errors.append(f"Windows UI missing explicit startup action: {required}")
-for forbidden in ["Configure Start with Windows...", "shell:startup"]:
-    if forbidden in control:
-        errors.append(f"Windows UI must not fall back to manual startup configuration: {forbidden}")
 
-main = MAIN.read_text(encoding="utf-8")
-if "set_startup_enabled(true)" in main or "set_startup_enabled(false)" in main:
-    errors.append("InputKey bootstrap must not mutate autorun implicitly")
-for required in ["InputKeyStartup.exe", 'command.arg("--enable")', 'command.arg("--disable")']:
-    if required not in main:
-        errors.append(f"InputKey bootstrap must delegate explicit startup changes to helper: {required}")
+main = MAIN.read_text(encoding="utf-8-sig")
+for forbidden in [
+    "InputKeyStartup.exe",
+    "startup_helper_path",
+    "set_startup_enabled(",
+    "startup_enabled()",
+    'wide("runas")',
+    "ShellExecuteExW",
+]:
+    if forbidden in main:
+        errors.append(f"InputKey bootstrap violates user-only startup contract: {forbidden}")
 
-deploy = DEPLOY.read_text(encoding="utf-8")
-for forbidden in ["CurrentVersion\\Run", "Set-ItemProperty", "New-ItemProperty", "Remove-ItemProperty"]:
+boot_cargo = BOOT_CARGO.read_text(encoding="utf-8")
+if "InputKeyStartup" in boot_cargo:
+    errors.append("startup helper binary is still declared in Bootstrap/WindowsControl/Cargo.toml")
+
+deploy = DEPLOY.read_text(encoding="utf-8-sig")
+for forbidden in [
+    r"CurrentVersion\Run",
+    "Set-ItemProperty",
+    "New-ItemProperty",
+    "Remove-ItemProperty",
+    "Start-Process -Verb RunAs",
+]:
     if forbidden in deploy:
-        errors.append(
-            f"portable deploy must not change Start with Windows implicitly: {forbidden}"
-        )
-if "InputKeyStartup.exe" not in deploy:
-    errors.append("portable deploy must carry InputKeyStartup.exe without invoking it")
+        errors.append(f"portable deploy must not own startup persistence/elevation: {forbidden}")
+
+for required in [
+    "ObsoleteStartupHelper",
+    "Remove-Item -LiteralPath $ObsoleteStartupHelper",
+]:
+    if required not in deploy:
+        errors.append(f"portable deploy must remove obsolete startup helper: {required}")
 
 build = BUILD.read_text(encoding="utf-8")
-if "InputKeyStartup.exe" not in build or "--bin InputKeyStartup" not in build:
-    errors.append("Windows package must build and include InputKeyStartup.exe")
+if "InputKeyStartup" in build:
+    errors.append("Windows package still builds or includes InputKeyStartup.exe")
 
 if errors:
     print("Windows startup persistence contract violation:")
@@ -85,5 +112,7 @@ if errors:
     sys.exit(1)
 
 print(
-    "Windows startup persistence contract passed: normal startup and deploy do not change autorun; explicit UI changes are isolated in InputKeyStartup.exe using a Startup shortcut."
+    "Windows startup persistence contract passed: explicit UI changes HKCU Run directly; "
+    "TSF/startup stay in current-user scope, normal startup/deploy remain persistence-neutral, "
+    "and no startup helper is packaged."
 )

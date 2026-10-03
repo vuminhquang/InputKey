@@ -9,6 +9,12 @@ const EM_GETSEL: u32 = 0x00b0;
 const EM_SETSEL: u32 = 0x00b1;
 const EM_REPLACESEL: u32 = 0x00c2;
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum CaptureError {
+    Unsupported,
+    Denied,
+}
+
 #[derive(Clone, Copy)]
 pub struct OwnedRange {
     target: HWND,
@@ -21,16 +27,16 @@ impl OwnedRange {
         self.target as isize
     }
 
-    pub fn capture(target: HWND) -> Option<Self> {
+    pub fn capture(target: HWND) -> Result<Self, CaptureError> {
         if target.is_null() || unsafe { IsWindow(target) } == 0 {
-            return None;
+            return Err(CaptureError::Unsupported);
         }
         let style = unsafe { GetWindowLongPtrW(target, GWL_STYLE) } as u32;
         if style & ES_PASSWORD as u32 != 0 || style & ES_READONLY as u32 != 0 {
-            return None;
+            return Err(CaptureError::Denied);
         }
-        let (start, end) = current_selection(target)?;
-        Some(Self { target, start, end })
+        let (start, end) = current_selection(target).ok_or(CaptureError::Unsupported)?;
+        Ok(Self { target, start, end })
     }
 
     pub fn replace(&mut self, text: &str) -> bool {

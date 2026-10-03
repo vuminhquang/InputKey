@@ -2,7 +2,8 @@
 fn main() -> windows::core::Result<()> {
     use inputkey_windows_tsf::{
         activate_text_service, bind_text_service_dll, disable_text_service, register_text_service,
-        text_service_active, text_service_available, unregister_text_service,
+        text_service_active, text_service_available, text_service_bound, text_service_registered,
+        unregister_text_service,
     };
     use std::path::PathBuf;
     use windows::Win32::System::Com::{CoInitializeEx, CoUninitialize, COINIT_APARTMENTTHREADED};
@@ -21,9 +22,11 @@ fn main() -> windows::core::Result<()> {
 
     if status {
         println!(
-            "available={} active={}",
+            "registered={} available={} active={} bound={}",
+            text_service_registered(),
             text_service_available(),
-            text_service_active()
+            text_service_active(),
+            text_service_bound()
         );
         unsafe {
             CoUninitialize();

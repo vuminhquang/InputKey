@@ -1,3 +1,9 @@
+# 5.2.6
+
+- Restored `Start with Windows` to a direct current-user `HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run` registration from the tray process; removed the separate startup helper and Startup-folder shortcut path that triggered Defender persistence heuristics.
+- Kept TSF as the primary Windows path: InputKey automatically registers/repairs/enables/activates its Text Service profile for the current user without UAC, and `Remove Windows integration...` can unregister that user-wide TSF profile/COM binding.
+- Compatibility fallback now admits generic user-session text targets to the worker capability probe, tries native range then UI Automation then eligible synthetic fallback, and no longer disables compatibility globally after one transport failure.
+
 # 5.2.3
 
 - Kept the 5.2.2 Vietnamese boundary fixes: physical consonant onsets are preserved, vowel-initial correction stays in the same vowel family, and `[` / `]` remain ordinary punctuation.
