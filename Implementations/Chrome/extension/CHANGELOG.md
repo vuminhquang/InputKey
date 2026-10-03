@@ -1,3 +1,11 @@
+# 5.2.1
+
+- Windows portable builds now keep all binaries in one self-contained folder, automatically rebind the existing TSF COM registration to the `InputKeyTSF.dll` beside the running `InputKey.exe`, and reuse the same stable TSF CLSID/profile across upgrades instead of creating version-specific registrations.
+- `Turn off InputKey and exit` now persists the disabled state before the tray app closes; graceful `WM_CLOSE` follows the same rule so a vanished tray cannot leave InputKey logically enabled.
+- Added an explicit `Remove Windows integration...` action that disables InputKey, removes Start with Windows, unregisters the TSF profile/COM class, and then exits without deleting the portable folder.
+- Added configurable InputKey on/off shortcuts on Windows and Chromium. The default is `Ctrl+Shift`; examples such as `Alt+Z` and `Ctrl+Shift+K` are accepted, `Off` disables the shortcut, and `Ctrl+Alt` combinations are rejected to preserve AltGr.
+- Renamed and explained Auto Restore as restoring the original physical keys when a Telex/VNI interpretation stops looking like valid Vietnamese, rather than leaving a mistaken conversion.
+
 # 5.2.0
 
 - Added native settings UI for Windows, macOS, and Linux while keeping the Chromium extension popup as the browser settings surface.

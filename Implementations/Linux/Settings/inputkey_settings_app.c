@@ -261,10 +261,16 @@ int main(int argc, char **argv) {
     gtk_grid_attach(GTK_GRID(grid), GTK_WIDGET(method_combo), 1, 1, 1, 1);
 
     simple_telex = gtk_check_button_new_with_label("Simple Telex");
-    auto_restore = gtk_check_button_new_with_label("Auto Restore");
+    auto_restore = gtk_check_button_new_with_label("Restore original keys automatically (Auto Restore)");
     smart_correction = gtk_check_button_new_with_label("Smart correction");
     gtk_box_pack_start(GTK_BOX(root), simple_telex, FALSE, FALSE, 0);
     gtk_box_pack_start(GTK_BOX(root), auto_restore, FALSE, FALSE, 0);
+    GtkWidget *restore_hint = gtk_label_new(
+        "If a Telex/VNI transformation stops looking like valid Vietnamese, restore the physical keys you actually typed instead of keeping a mistaken conversion.");
+    gtk_label_set_line_wrap(GTK_LABEL(restore_hint), TRUE);
+    gtk_widget_set_halign(restore_hint, GTK_ALIGN_START);
+    gtk_style_context_add_class(gtk_widget_get_style_context(restore_hint), "dim-label");
+    gtk_box_pack_start(GTK_BOX(root), restore_hint, FALSE, FALSE, 0);
     gtk_box_pack_start(GTK_BOX(root), smart_correction, FALSE, FALSE, 0);
 
     GtkWidget *hint = gtk_label_new(

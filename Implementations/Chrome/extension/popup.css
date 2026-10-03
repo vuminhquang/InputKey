@@ -8,6 +8,11 @@ h1 { margin:0; font-size:18px; line-height:1.2; letter-spacing:-.01em; }
 .mode.off { background:#64748b; }
 .field { display:flex; align-items:center; justify-content:space-between; margin-top:18px; font-size:13px; font-weight:600; }
 select { min-width:125px; padding:7px 9px; border-radius:8px; }
+.shortcut-field input { width:150px; padding:7px 9px; border:1px solid color-mix(in srgb, CanvasText 28%, transparent); border-radius:8px; background:Canvas; color:CanvasText; }
+.shortcut-row { display:flex; align-items:flex-start; gap:8px; margin-top:6px; }
+.shortcut-row small { flex:1; opacity:.68; line-height:1.35; }
+.shortcut-row button { padding:6px 9px; border-radius:8px; border:1px solid color-mix(in srgb, CanvasText 25%, transparent); background:Canvas; color:CanvasText; cursor:pointer; }
+.shortcut-row.invalid small { opacity:1; font-weight:650; }
 .check { display:flex; gap:9px; align-items:flex-start; margin-top:12px; font-size:12.5px; line-height:1.38; }
 .check input { margin-top:2px; }
 .hint { margin-top:15px; padding:11px; border-radius:9px; background:color-mix(in srgb, CanvasText 7%, Canvas); font-size:11.5px; line-height:1.62; }

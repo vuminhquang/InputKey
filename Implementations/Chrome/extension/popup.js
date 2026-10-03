@@ -6,6 +6,7 @@ const DEFAULTS = {
   simpleTelex: false,
   autoRestore: true,
   smartCorrection: true,
+  toggleShortcut: 'Ctrl+Shift',
   showToast: true
 };
 const $ = id => document.getElementById(id);
@@ -62,6 +63,12 @@ function renderLanguageOptions(language, state) {
     span.textContent = option.label;
     label.append(input, span);
     host.append(label);
+    if (option.id === 'auto_restore') {
+      const note = document.createElement('p');
+      note.className = 'micro-note';
+      note.textContent = 'Khi phép biến đổi Telex/VNI không còn giống tiếng Việt hợp lệ, InputKey tự trả về đúng chuỗi phím vật lý đã gõ thay vì giữ một chuyển đổi sai.';
+      host.append(note);
+    }
   }
 }
 
@@ -98,6 +105,7 @@ function paint(state) {
     : 'OFF';
   $('toggle').classList.toggle('off', !current.enabled);
   $('showToast').checked = current.showToast;
+  $('toggleShortcut').value = current.toggleShortcut || 'Ctrl+Shift';
   renderLanguageOptions(language, current);
   renderHint(language);
 }
@@ -126,6 +134,20 @@ $('method').addEventListener('change', e =>
 $('showToast').addEventListener('change', e =>
   chrome.storage.local.set({ showToast: e.target.checked })
 );
+$('applyToggleShortcut').addEventListener('click', async () => {
+  const field = $('toggleShortcut');
+  const row = field.closest('.shortcut-field')?.nextElementSibling;
+  const normalized = InputKeyShortcut.normalize(field.value);
+  if (!normalized) {
+    row?.classList.add('invalid');
+    $('shortcutHint').textContent = 'Tổ hợp không hợp lệ. Dùng ít nhất một modifier; Ctrl+Alt được dành cho AltGr.';
+    return;
+  }
+  row?.classList.remove('invalid');
+  $('shortcutHint').textContent = 'Ví dụ: Ctrl+Shift · Alt+Z · Ctrl+Shift+K · Off. Ctrl+Alt được dành cho AltGr.';
+  field.value = normalized;
+  await chrome.storage.local.set({ toggleShortcut: normalized });
+});
 chrome.storage.onChanged.addListener((_, area) => {
   if (area === 'local') load();
 });

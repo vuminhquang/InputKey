@@ -49,6 +49,7 @@ globalThis.fetch = async file => new Response(readFileSync(file), {
 });
 
 require('./engine_wasm.js');
+require('./shortcut.js');
 
 before(async () => {
   await InputKey.ready;
@@ -185,6 +186,15 @@ test('French Telex uses the same Root engine contract', () => {
   engine.destroy();
 });
 
+test('toggle shortcut parser supports modifier-only and keyed chords', () => {
+  assert.equal(InputKeyShortcut.normalize('control + shift'), 'Ctrl+Shift');
+  assert.equal(InputKeyShortcut.normalize('Alt+z'), 'Alt+Z');
+  assert.equal(InputKeyShortcut.normalize('Ctrl+Shift+k'), 'Ctrl+Shift+K');
+  assert.equal(InputKeyShortcut.normalize('off'), 'Off');
+  assert.equal(InputKeyShortcut.normalize('Ctrl+Alt+K'), null);
+  assert.equal(InputKeyShortcut.normalize('Ctrl'), null);
+});
+
 test('Rust WASM is self-contained and exposes the language-neutral ABI', async () => {
   const module = await WebAssembly.compile(readFileSync(wasmPath));
   assert.deepEqual(WebAssembly.Module.imports(module), []);
@@ -207,7 +217,7 @@ test('Rust WASM is self-contained and exposes the language-neutral ABI', async (
 
 test('manifest uses only the Rust bridge and InputKey WASM', () => {
   const manifest = JSON.parse(readFileSync(path.join(__dirname, 'manifest.json'), 'utf8'));
-  assert.equal(manifest.version, '5.2.0');
-  assert.deepEqual(manifest.content_scripts[0].js, ['engine_wasm.js', 'content.js']);
+  assert.equal(manifest.version, '5.2.1');
+  assert.deepEqual(manifest.content_scripts[0].js, ['engine_wasm.js', 'shortcut.js', 'content.js']);
   assert.deepEqual(manifest.web_accessible_resources[0].resources, ['inputkey.wasm']);
 });

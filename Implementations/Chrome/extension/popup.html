@@ -29,6 +29,15 @@
 
     <div id="languageOptions"></div>
 
+    <label class="field shortcut-field">
+      <span>Bật/tắt InputKey</span>
+      <input id="toggleShortcut" type="text" spellcheck="false" autocomplete="off" placeholder="Ctrl+Shift">
+    </label>
+    <div class="shortcut-row">
+      <small id="shortcutHint">Ví dụ: Ctrl+Shift · Alt+Z · Ctrl+Shift+K · Off. Ctrl+Alt được dành cho AltGr.</small>
+      <button id="applyToggleShortcut" type="button">Áp dụng</button>
+    </div>
+
     <label class="check">
       <input id="showToast" type="checkbox">
       <span>Hiện thông báo khi bật/tắt InputKey</span>
@@ -48,6 +57,7 @@
     <p class="developer">Developer: <a href="mailto:vu.minh.quang@outlook.com">vu.minh.quang@outlook.com</a></p>
   </main>
   <script src="engine_wasm.js"></script>
+  <script src="shortcut.js"></script>
   <script src="popup.js"></script>
 </body>
 </html>

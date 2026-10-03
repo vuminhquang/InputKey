@@ -6,6 +6,7 @@ const DEFAULTS = {
   simpleTelex: false,
   autoRestore: true,
   smartCorrection: true,
+  toggleShortcut: 'Ctrl+Shift',
   showToast: true
 };
 

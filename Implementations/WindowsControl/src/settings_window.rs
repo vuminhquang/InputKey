@@ -17,6 +17,8 @@ const ID_SIMPLE_TELEX: i32 = 4104;
 const ID_AUTO_RESTORE: i32 = 4105;
 const ID_SMART_CORRECTION: i32 = 4106;
 const ID_CLOSE: i32 = 4107;
+const ID_TOGGLE_SHORTCUT: i32 = 4108;
+const ID_APPLY_SHORTCUT: i32 = 4109;
 
 const INPUTKEY_BST_UNCHECKED: u32 = 0;
 const INPUTKEY_BST_CHECKED: u32 = 1;
@@ -50,6 +52,13 @@ unsafe fn set_text(hwnd: HWND, text: &str) {
     unsafe {
         SetWindowTextW(hwnd, wide(text).as_ptr());
     }
+}
+
+unsafe fn get_text(hwnd: HWND) -> String {
+    let length = unsafe { GetWindowTextLengthW(hwnd) };
+    let mut buffer = vec![0u16; length as usize + 1];
+    let read = unsafe { GetWindowTextW(hwnd, buffer.as_mut_ptr(), buffer.len() as i32) };
+    String::from_utf16_lossy(&buffer[..read as usize])
 }
 
 unsafe fn child(parent: HWND, id: i32) -> HWND {
@@ -160,6 +169,7 @@ unsafe fn refresh(parent: HWND) {
 
     unsafe {
         set_check(parent, ID_ENABLED, current.enabled);
+        set_text(child(parent, ID_TOGGLE_SHORTCUT), &current.toggle_shortcut);
     }
 
     if let Some(language) = active_language(&all, &current) {
@@ -235,6 +245,35 @@ unsafe fn create_control(
     hwnd
 }
 
+unsafe fn show_shortcut_error(parent: HWND) {
+    let title = wide("Invalid toggle shortcut");
+    let message = wide("Use combinations such as Ctrl+Shift, Alt+Z, or Ctrl+Shift+K. Type Off to disable the shortcut. Ctrl+Alt combinations are reserved to avoid breaking AltGr input.");
+    unsafe {
+        MessageBoxW(
+            parent,
+            message.as_ptr(),
+            title.as_ptr(),
+            MB_OK | MB_ICONWARNING,
+        );
+    }
+}
+
+unsafe fn apply_toggle_shortcut(parent: HWND) {
+    let value = unsafe { get_text(child(parent, ID_TOGGLE_SHORTCUT)) };
+    let Some(normalized) = crate::toggle_shortcut::normalize(&value) else {
+        unsafe {
+            show_shortcut_error(parent);
+        }
+        return;
+    };
+    let mut current = settings::load();
+    current.toggle_shortcut = normalized.clone();
+    unsafe {
+        save_and_signal(current);
+        set_text(child(parent, ID_TOGGLE_SHORTCUT), &normalized);
+    }
+}
+
 unsafe fn build_controls(parent: HWND) {
     unsafe {
         create_control(parent, "STATIC", "InputKey", 0, 24, 20, 230, 28, 4189);
@@ -291,7 +330,7 @@ unsafe fn build_controls(parent: HWND) {
         create_control(
             parent,
             "BUTTON",
-            "Auto Restore",
+            "Restore original keys automatically",
             BS_AUTOCHECKBOX as u32,
             24,
             240,
@@ -301,11 +340,22 @@ unsafe fn build_controls(parent: HWND) {
         );
         create_control(
             parent,
+            "STATIC",
+            "If a Telex/VNI transformation stops looking like valid Vietnamese, restore the physical keys you actually typed instead of keeping a mistaken conversion.",
+            0,
+            48,
+            264,
+            352,
+            36,
+            4194,
+        );
+        create_control(
+            parent,
             "BUTTON",
             "Smart correction",
             BS_AUTOCHECKBOX as u32,
             24,
-            272,
+            304,
             260,
             24,
             ID_SMART_CORRECTION,
@@ -314,10 +364,55 @@ unsafe fn build_controls(parent: HWND) {
         create_control(
             parent,
             "STATIC",
+            "Toggle shortcut",
+            0,
+            24,
+            344,
+            120,
+            20,
+            4195,
+        );
+        create_control(
+            parent,
+            "EDIT",
+            "Ctrl+Shift",
+            WS_BORDER | ES_AUTOHSCROLL as u32,
+            150,
+            340,
+            164,
+            25,
+            ID_TOGGLE_SHORTCUT,
+        );
+        create_control(
+            parent,
+            "BUTTON",
+            "Apply",
+            BS_PUSHBUTTON as u32,
+            322,
+            339,
+            78,
+            27,
+            ID_APPLY_SHORTCUT,
+        );
+        create_control(
+            parent,
+            "STATIC",
+            "Examples: Ctrl+Shift, Alt+Z, Ctrl+Shift+K. Use Off to disable. Ctrl+Alt is reserved for AltGr.",
+            0,
+            24,
+            372,
+            376,
+            34,
+            4196,
+        );
+
+        create_control(
+            parent,
+            "STATIC",
             "Space commits the current token. Shift+Space keeps the physical key sequence and ends composition without inserting a space.",
             0,
             24,
-            314,
+            416,
             376,
             44,
             4193,
@@ -329,7 +424,7 @@ unsafe fn build_controls(parent: HWND) {
             "Close",
             BS_PUSHBUTTON as u32,
             310,
-            370,
+            474,
             90,
             28,
             ID_CLOSE,
@@ -429,6 +524,9 @@ unsafe extern "system" fn window_proc(
                         save_and_signal(current);
                     }
                 }
+                ID_APPLY_SHORTCUT if notification == BN_CLICKED => unsafe {
+                    apply_toggle_shortcut(hwnd);
+                },
                 ID_CLOSE if notification == BN_CLICKED => unsafe {
                     ShowWindow(hwnd, SW_HIDE);
                 },
@@ -493,7 +591,7 @@ pub unsafe fn show(owner: HWND, actions: &ControlActions) {
             CW_USEDEFAULT,
             CW_USEDEFAULT,
             450,
-            455,
+            565,
             owner,
             std::ptr::null_mut(),
             instance,

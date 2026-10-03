@@ -10,13 +10,14 @@
     simpleTelex: false,
     autoRestore: true,
     smartCorrection: true,
+    toggleShortcut: 'Ctrl+Shift',
     showToast: true
   };
 
   let settings = { ...DEFAULTS };
   const states = new WeakMap();
   let internalEdit = false;
-  let chord = { ctrl: false, shift: false, armed: false, used: false };
+  let toggleChord = { ctrl:false, alt:false, shift:false, meta:false, armed:false, used:false };
 
   chrome.storage.local.get(DEFAULTS, saved => {
     settings = { ...DEFAULTS, ...saved };
@@ -215,13 +216,33 @@
     })[key] || 'other';
   }
 
+  function parsedToggleShortcut() {
+    const parsed = InputKeyShortcut.parse(settings.toggleShortcut);
+    return parsed.valid ? parsed : InputKeyShortcut.parse(DEFAULTS.toggleShortcut);
+  }
+
+  function chordModifiers() {
+    return { ctrl:toggleChord.ctrl, alt:toggleChord.alt, shift:toggleChord.shift, meta:toggleChord.meta };
+  }
+
+  function chordHasModifier() {
+    return toggleChord.ctrl || toggleChord.alt || toggleChord.shift || toggleChord.meta;
+  }
 
   document.addEventListener('keydown', e => {
-    if (e.key === 'Control') { chord.ctrl = true; if (chord.shift) chord.armed = true; return; }
-    if (e.key === 'Shift') { chord.shift = true; if (chord.ctrl) chord.armed = true; return; }
-    if (chord.ctrl || chord.shift) chord.used = true;
+    const parsedToggle = parsedToggleShortcut();
+    const modifier = InputKeyShortcut.modifierName(e.key);
+    if (modifier) {
+      toggleChord[modifier] = true;
+      if (!parsedToggle.disabled && !parsedToggle.key) {
+        if (InputKeyShortcut.sameModifiers(parsedToggle.modifiers, chordModifiers())) toggleChord.armed = true;
+        else if (toggleChord.armed) toggleChord.used = true;
+      }
+      return;
+    }
+    if (chordHasModifier()) toggleChord.used = true;
 
-    if (e.altKey && !e.ctrlKey && !e.metaKey && e.key.toLowerCase() === 'z') {
+    if (!isAltGraph(e) && InputKeyShortcut.matchesKeyDown(parsedToggle, e)) {
       e.preventDefault();
       e.stopImmediatePropagation();
       toggleInputKey();
@@ -305,14 +326,18 @@
   }, true);
 
   document.addEventListener('keyup', e => {
-    if (e.key === 'Control') chord.ctrl = false;
-    if (e.key === 'Shift') chord.shift = false;
-    if ((e.key === 'Control' || e.key === 'Shift') && chord.armed && !chord.used && (!chord.ctrl || !chord.shift)) {
-      chord.armed = false;
-      chord.used = true;
+    const modifier = InputKeyShortcut.modifierName(e.key);
+    if (!modifier) return;
+    const parsedToggle = parsedToggleShortcut();
+    if (!parsedToggle.disabled && !parsedToggle.key && toggleChord.armed && !toggleChord.used) {
+      toggleChord.armed = false;
+      toggleChord.used = true;
       toggleInputKey();
     }
-    if (!chord.ctrl && !chord.shift) chord = { ctrl: false, shift: false, armed: false, used: false };
+    toggleChord[modifier] = false;
+    if (!chordHasModifier()) {
+      toggleChord = { ctrl:false, alt:false, shift:false, meta:false, armed:false, used:false };
+    }
   }, true);
 
   document.addEventListener('mousedown', e => {

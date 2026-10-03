@@ -122,7 +122,7 @@ fn show_text_service_result(active: bool, installed_now: bool) {
     let message = if active {
         if installed_now {
             wide(
-                "InputKey Text Service is installed and active.\n\nApplications that were already open before installation may need to be restarted once before InputKey is available there. The tray app is not required for TSF typing.",
+                "InputKey Text Service is installed and active.\n\nApplications that were already open before installation may need to be restarted once before InputKey is available there. Choosing Turn off InputKey and exit disables InputKey before the tray closes.",
             )
         } else {
             wide(
@@ -233,6 +233,13 @@ fn main() {
         install_text_service: Arc::new(|| {
             #[cfg(windows)]
             install_text_service();
+        }),
+        remove_windows_integration: Arc::new(move || {
+            if !tsf_com_ready {
+                return false;
+            }
+            let _ = inputkey_windows_tsf::disable_text_service();
+            inputkey_windows_tsf::unregister_text_service().is_ok()
         }),
         text_service_available: Arc::new(move || {
             tsf_com_ready && inputkey_windows_tsf::text_service_available()

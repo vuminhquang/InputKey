@@ -15,6 +15,7 @@ required_files = {
     "background.js",
     "content.js",
     "engine_wasm.js",
+    "shortcut.js",
 }
 
 errors: list[str] = []
@@ -42,7 +43,10 @@ if popup_path.is_file():
         'id="method"',
         'id="languageOptions"',
         'id="showToast"',
+        'id="toggleShortcut"',
+        'id="applyToggleShortcut"',
         'id="try"',
+        'src="shortcut.js"',
         'src="popup.js"',
         'href="popup.css"',
     ):
@@ -57,6 +61,7 @@ if popup_js.is_file():
         "chrome.storage.local",
         "InputKey.catalog()",
         "new InputKey.Engine",
+        "InputKeyShortcut.normalize",
     ):
         if token not in source:
             errors.append(f"Chrome popup behavior contract missing: {token}")

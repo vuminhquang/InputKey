@@ -122,10 +122,11 @@ static NSString *InputKeyCatalogJSON(void) {
     self.simpleTelex.identifier = @"simple_telex";
     [content addSubview:self.simpleTelex];
 
-    self.autoRestore = [self checkbox:@"Auto Restore"
+    self.autoRestore = [self checkbox:@"Restore original keys automatically"
                                 frame:NSMakeRect(24, 158, 240, 24)
                                action:@selector(optionChanged:)];
     self.autoRestore.identifier = @"auto_restore";
+    self.autoRestore.toolTip = @"If a Telex/VNI transformation stops looking like valid Vietnamese, restore the physical keys you actually typed instead of keeping a mistaken conversion.";
     [content addSubview:self.autoRestore];
 
     self.smartCorrection = [self checkbox:@"Smart correction"

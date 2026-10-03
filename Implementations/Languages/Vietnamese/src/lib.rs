@@ -52,7 +52,7 @@ impl LanguagePackPort for VietnamesePack {
                 },
                 LanguageOptionMetadata {
                     id: "auto_restore".into(),
-                    label: "Auto Restore".into(),
+                    label: "Restore original keys automatically (Auto Restore)".into(),
                     default_enabled: true,
                 },
                 LanguageOptionMetadata {

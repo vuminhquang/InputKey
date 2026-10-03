@@ -6,6 +6,7 @@ pub struct Settings {
     pub simple_telex: bool,
     pub auto_restore: bool,
     pub smart_correction: bool,
+    pub toggle_shortcut: String,
 }
 
 impl Default for Settings {
@@ -17,6 +18,7 @@ impl Default for Settings {
             simple_telex: false,
             auto_restore: true,
             smart_correction: true,
+            toggle_shortcut: "Ctrl+Shift".into(),
         }
     }
 }
@@ -151,6 +153,8 @@ mod registry {
                 smart_correction: read_dword(key, "SmartCorrection")
                     .unwrap_or(defaults.smart_correction as u32)
                     != 0,
+                toggle_shortcut: read_string(key, "ToggleShortcut")
+                    .unwrap_or(defaults.toggle_shortcut),
             }
         };
 
@@ -193,6 +197,7 @@ mod registry {
             write_dword(key, "SimpleTelex", settings.simple_telex as u32);
             write_dword(key, "AutoRestore", settings.auto_restore as u32);
             write_dword(key, "SmartCorrection", settings.smart_correction as u32);
+            write_string(key, "ToggleShortcut", &settings.toggle_shortcut);
             let _ = RegCloseKey(key);
         }
     }
@@ -220,5 +225,6 @@ mod tests {
         assert_eq!(settings.method, "telex");
         assert!(!settings.simple_telex);
         assert!(settings.smart_correction);
+        assert_eq!(settings.toggle_shortcut, "Ctrl+Shift");
     }
 }

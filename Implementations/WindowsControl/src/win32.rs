@@ -18,6 +18,7 @@ const ID_SMART_CORRECTION: usize = 105;
 const ID_STARTUP: usize = 106;
 const ID_INSTALL_TSF: usize = 107;
 const ID_EXIT: usize = 108;
+const ID_REMOVE_WINDOWS_INTEGRATION: usize = 109;
 const ID_LANGUAGE_BASE: usize = 2000;
 const ID_METHOD_BASE: usize = 3000;
 
@@ -232,7 +233,7 @@ unsafe fn show_menu(hwnd: HWND) {
                     menu,
                     MF_STRING | checked(current.auto_restore),
                     ID_AUTO_RESTORE,
-                    wide("Auto Restore").as_ptr(),
+                    wide("Restore original keys automatically").as_ptr(),
                 );
             }
             let has_smart_correction = language.options.iter().any(|o| o.id == "smart_correction");
@@ -247,6 +248,12 @@ unsafe fn show_menu(hwnd: HWND) {
         }
 
         AppendMenuW(menu, MF_SEPARATOR, 0, std::ptr::null());
+        AppendMenuW(
+            menu,
+            MF_STRING | MF_GRAYED,
+            0,
+            wide(&format!("Toggle shortcut: {}", current.toggle_shortcut)).as_ptr(),
+        );
         AppendMenuW(menu, MF_STRING, ID_SETTINGS, wide("Settings...").as_ptr());
         AppendMenuW(menu, MF_SEPARATOR, 0, std::ptr::null());
 
@@ -282,12 +289,24 @@ unsafe fn show_menu(hwnd: HWND) {
         AppendMenuW(menu, MF_SEPARATOR, 0, std::ptr::null());
         AppendMenuW(
             menu,
+            MF_STRING,
+            ID_REMOVE_WINDOWS_INTEGRATION,
+            wide("Remove Windows integration...").as_ptr(),
+        );
+        AppendMenuW(menu, MF_SEPARATOR, 0, std::ptr::null());
+        AppendMenuW(
+            menu,
             MF_STRING | checked(startup::is_enabled()),
             ID_STARTUP,
             wide("Start with Windows").as_ptr(),
         );
         AppendMenuW(menu, MF_SEPARATOR, 0, std::ptr::null());
-        AppendMenuW(menu, MF_STRING, ID_EXIT, wide("Exit").as_ptr());
+        AppendMenuW(
+            menu,
+            MF_STRING,
+            ID_EXIT,
+            wide("Turn off InputKey and exit").as_ptr(),
+        );
 
         let mut point = POINT { x: 0, y: 0 };
         GetCursorPos(&mut point);
@@ -305,6 +324,58 @@ unsafe fn show_menu(hwnd: HWND) {
     }
 }
 
+fn turn_off_and_notify(hwnd: HWND) {
+    let mut current = settings::load();
+    if current.enabled {
+        current.enabled = false;
+        save_and_notify(current, hwnd);
+    } else {
+        notify_settings_changed();
+    }
+}
+
+unsafe fn remove_windows_integration(hwnd: HWND) {
+    let title = wide("Remove InputKey from Windows");
+    let prompt = wide("This turns InputKey off, removes Start with Windows, unregisters the InputKey Text Service, and exits the tray app. The portable folder itself is not deleted.\n\nAlready-open applications may keep InputKeyTSF.dll loaded until they are closed. Continue?");
+    let answer = unsafe {
+        MessageBoxW(
+            hwnd,
+            prompt.as_ptr(),
+            title.as_ptr(),
+            MB_YESNO | MB_ICONWARNING | MB_DEFBUTTON2,
+        )
+    };
+    if answer != IDYES {
+        return;
+    }
+
+    turn_off_and_notify(hwnd);
+    startup::set_enabled(false);
+
+    let removed = ACTIONS
+        .get()
+        .is_some_and(|actions| (actions.remove_windows_integration)());
+    if removed {
+        let message = wide("Windows integration was removed. You can move or delete the portable InputKey folder after closing applications that may still have InputKeyTSF.dll loaded.");
+        unsafe {
+            MessageBoxW(
+                hwnd,
+                message.as_ptr(),
+                title.as_ptr(),
+                MB_OK | MB_ICONINFORMATION,
+            );
+        }
+        unsafe {
+            DestroyWindow(hwnd);
+        }
+    } else {
+        let message = wide("InputKey was turned off, but Windows integration could not be fully removed. The portable folder was left untouched.");
+        unsafe {
+            MessageBoxW(hwnd, message.as_ptr(), title.as_ptr(), MB_OK | MB_ICONERROR);
+        }
+    }
+}
+
 unsafe extern "system" fn window_proc(
     hwnd: HWND,
     message: u32,
@@ -312,6 +383,12 @@ unsafe extern "system" fn window_proc(
     lparam: LPARAM,
 ) -> LRESULT {
     match message {
+        crate::toggle_shortcut::TOGGLE_MESSAGE => {
+            let mut current = settings::load();
+            current.enabled = !current.enabled;
+            save_and_notify(current, hwnd);
+            0
+        }
         TRAY_MESSAGE if lparam as u32 == WM_LBUTTONUP => {
             let mut current = settings::load();
             current.enabled = !current.enabled;
@@ -384,9 +461,11 @@ unsafe extern "system" fn window_proc(
                         (actions.install_text_service)();
                     }
                 }
+                ID_REMOVE_WINDOWS_INTEGRATION => unsafe {
+                    remove_windows_integration(hwnd);
+                },
                 ID_EXIT => {
-                    current.enabled = false;
-                    save_and_notify(current, hwnd);
+                    turn_off_and_notify(hwnd);
                     unsafe {
                         DestroyWindow(hwnd);
                     }
@@ -395,7 +474,15 @@ unsafe extern "system" fn window_proc(
             }
             0
         }
+        WM_CLOSE => {
+            turn_off_and_notify(hwnd);
+            unsafe {
+                DestroyWindow(hwnd);
+            }
+            0
+        }
         settings_window::SETTINGS_CHANGED_MESSAGE => {
+            crate::toggle_shortcut::refresh();
             notify_settings_changed();
             unsafe {
                 update_tray(hwnd);
@@ -472,6 +559,7 @@ pub fn run(actions: ControlActions) {
         Shell_NotifyIconW(NIM_ADD, &tray);
         update_tray(hwnd);
     }
+    let _toggle_shortcut_hook = crate::toggle_shortcut::install(hwnd);
 
     let mut message: MSG = unsafe { std::mem::zeroed() };
     while unsafe { GetMessageW(&mut message, std::ptr::null_mut(), 0, 0) } > 0 {
