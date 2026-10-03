@@ -76,6 +76,9 @@ for label, text in [
         "ShellExecuteExW",
         "HKEY_LOCAL_MACHINE",
         "HKLM:",
+        ".Register(&CLSID_INPUTKEY_TEXT_SERVICE)",
+        ".AddLanguageProfile(",
+        "RegisterProfile(",
     ]:
         if forbidden in text:
             errors.append(f"{label} violates current-user TSF contract: {forbidden}")
@@ -88,8 +91,6 @@ for label, text, required in [
     ("registration", registration, "unregister_user_tip_state"),
     ("registration", registration, "REG_DWORD"),
     ("registration", registration, "register_text_service"),
-    ("registration", registration, ".Register(&CLSID_INPUTKEY_TEXT_SERVICE)"),
-    ("registration", registration, ".AddLanguageProfile("),
     ("registration", registration, ".RegisterCategory("),
     ("registration", registration, ".EnableLanguageProfile("),
     ("registration", registration, "unregister_text_service"),
@@ -102,8 +103,9 @@ for label, text, required in [
     ("registrar", registrar, "--activate-only"),
     ("registrar", registrar, "--disable"),
     ("packaged control", control, "ensure_packaged_text_service"),
-    ("packaged control", control, "register_text_service"),
-    ("packaged control", control, "unregister_text_service"),
+    ("packaged control", control, "run_registrar"),
+    ("packaged control", control, "--register-only"),
+    ("packaged control", control, "--unregister"),
     ("packaged control", control, "install_text_service"),
     ("packaged control", control, "runtime_directory"),
     ("Windows UI", control_ui, "Install Text Service..."),
@@ -119,6 +121,9 @@ for label, text, required in [
 
 if "let _ = ensure_packaged_text_service();" not in control:
     errors.append("InputKey startup must automatically register/repair/activate the current-user TSF service")
+
+if "inputkey_windows_tsf::register_text_service(" in control:
+    errors.append("InputKey.exe must isolate TSF registration in InputKeyTSFRegister.exe")
 
 if "installed_now = !inputkey_windows_tsf::text_service_registered()" not in control:
     errors.append("Install/Repair Text Service must distinguish a new current-user registration")

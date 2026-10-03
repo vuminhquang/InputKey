@@ -70,6 +70,22 @@ fn configure_runtime_languages() {
 }
 
 #[cfg(windows)]
+fn registrar_path() -> Option<std::path::PathBuf> {
+    package_directory().map(|directory| directory.join("InputKeyTSFRegister.exe"))
+}
+
+#[cfg(windows)]
+fn run_registrar(arguments: &[String]) -> bool {
+    let Some(registrar) = registrar_path().filter(|path| path.is_file()) else {
+        return false;
+    };
+    std::process::Command::new(registrar)
+        .args(arguments)
+        .status()
+        .is_ok_and(|status| status.success())
+}
+
+#[cfg(windows)]
 fn compatibility_path() -> Option<std::path::PathBuf> {
     package_directory().map(|directory| directory.join("InputKeyCompatibility.exe"))
 }
@@ -156,9 +172,17 @@ fn ensure_packaged_text_service() -> bool {
         return false;
     }
 
-    inputkey_windows_tsf::register_text_service(&dll).is_ok()
-        && inputkey_windows_tsf::activate_text_service().is_ok()
-        && inputkey_windows_tsf::text_service_active()
+    let registered = run_registrar(&[
+        "--register-only".to_owned(),
+        "--dll".to_owned(),
+        dll.to_string_lossy().into_owned(),
+    ]);
+    if !registered {
+        return false;
+    }
+    run_registrar(&["--activate-only".to_owned()])
+        && inputkey_windows_tsf::text_service_registered()
+        && inputkey_windows_tsf::text_service_bound()
 }
 
 #[cfg(windows)]
@@ -178,8 +202,8 @@ fn install_text_service() {
 
 #[cfg(windows)]
 fn remove_user_text_service_integration() -> bool {
-    let _ = inputkey_windows_tsf::disable_text_service();
-    inputkey_windows_tsf::unregister_text_service().is_ok()
+    let _ = run_registrar(&["--disable".to_owned()]);
+    run_registrar(&["--unregister".to_owned()])
 }
 
 fn main() {

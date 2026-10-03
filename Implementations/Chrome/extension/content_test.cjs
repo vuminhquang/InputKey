@@ -89,7 +89,7 @@ function type(input, text) {
 test('Shift+Space commits only the physical keys', () => {
   const input = new Input();
   type(input, 'refer');
-  assert.equal(input.value, 'rể');
+  assert.equal(input.value, 'r\u1ec3');
 
   const event = send(input, ' ', { shiftKey: true, code: 'Space' });
   assert.equal(event.prevented, true);
@@ -100,7 +100,7 @@ test('Shift+Space commits only the physical keys', () => {
 test('normal Space keeps word-finalization behavior', () => {
   const input = new Input();
   type(input, 'data');
-  assert.equal(input.value, 'dât');
+  assert.equal(input.value, 'd\u00e2t');
   send(input, ' ');
   assert.equal(input.value, 'data ');
 });
@@ -108,7 +108,7 @@ test('normal Space keeps word-finalization behavior', () => {
 test('Space decides whether an unfinished Vietnamese shape survives', () => {
   const input = new Input();
   type(input, 'thaas');
-  assert.equal(input.value, 'thấ');
+  assert.equal(input.value, 'th\u1ea5');
   send(input, ' ');
   assert.equal(input.value, 'thaas ');
 });
@@ -133,29 +133,29 @@ test('punctuation boundary shares Vietnamese correction policy', () => {
   const input = new Input();
   type(input, 'dduwocj');
   send(input, '.');
-  assert.equal(input.value, 'được.');
+  assert.equal(input.value, '\u0111\u01b0\u1ee3c.');
 });
 
 test('shortcut boundary commits displayed text and passes the chord through', () => {
   const input = new Input();
   type(input, 'dd');
-  assert.equal(input.value, 'đ');
+  assert.equal(input.value, '\u0111');
 
   const shortcut = send(input, 'a', { ctrlKey: true, code: 'KeyA' });
   assert.equal(shortcut.prevented, false);
-  assert.equal(input.value, 'đ');
+  assert.equal(input.value, '\u0111');
 
   send(input, 'a');
-  assert.equal(input.value, 'đa');
+  assert.equal(input.value, '\u0111a');
 });
 
 test('caret move boundary leaves the currently rendered text alone', () => {
   const input = new Input();
   type(input, 'dd');
-  assert.equal(input.value, 'đ');
+  assert.equal(input.value, '\u0111');
   const event = send(input, 'ArrowLeft', { code: 'ArrowLeft' });
   assert.equal(event.prevented, false);
-  assert.equal(input.value, 'đ');
+  assert.equal(input.value, '\u0111');
 });
 
 test('mouse caret move ends the active Root composition before relocation', () => {
@@ -175,7 +175,7 @@ test('mouse caret move ends the active Root composition before relocation', () =
 test('selecting existing text and typing replaces the selection', () => {
   const input = new Input();
   type(input, 'rooif');
-  assert.equal(input.value, 'rồi');
+  assert.equal(input.value, 'r\u1ed3i');
 
   handlers.get('mousedown')({ target: input, composedPath() { return [input]; } });
   input.selectionStart = 0;
@@ -188,17 +188,17 @@ test('selecting existing text and typing replaces the selection', () => {
 test('French Telex uses the same Root engine contract', () => {
   const engine = new InputKey.Engine({ language: 'fr', method: 'telex' });
   for (const key of 'oe') engine.character(key);
-  assert.equal(engine.rendered, 'œ');
+  assert.equal(engine.rendered, '\u0153');
   engine.lifecycle('reset');
   for (const key of 'cc') engine.character(key);
-  assert.equal(engine.rendered, 'ç');
+  assert.equal(engine.rendered, '\u00e7');
   engine.lifecycle('reset');
   for (const key of 'ee') engine.character(key);
-  assert.equal(engine.rendered, 'ê');
+  assert.equal(engine.rendered, '\u00ea');
   engine.lifecycle('reset');
   for (const key of 'es') engine.character(key);
-  assert.equal(engine.rendered, 'é');
-  assert.equal(engine.spaceBoundary(), 'é ');
+  assert.equal(engine.rendered, '\u00e9');
+  assert.equal(engine.spaceBoundary(), '\u00e9 ');
   engine.destroy();
 });
 

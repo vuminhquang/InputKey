@@ -187,110 +187,48 @@ unsafe fn profile_manager() -> Result<ITfInputProcessorProfileMgr> {
 
 pub fn register_text_service(dll_path: &Path) -> Result<()> {
     register_com_class(dll_path)?;
+    register_user_tip_state()?;
 
-    let profiles = unsafe { profiles()? };
-    if !text_service_registered() {
-        unsafe {
-            let _ = profiles.Register(&CLSID_INPUTKEY_TEXT_SERVICE);
-
-            let desc: Vec<u16> = "InputKey".encode_utf16().collect();
-            let icon: Vec<u16> = Vec::new();
-            let _ = profiles.AddLanguageProfile(
-                &CLSID_INPUTKEY_TEXT_SERVICE,
-                INPUTKEY_LANGID,
-                &GUID_INPUTKEY_PROFILE,
-                &desc,
-                &icon,
-                0,
-            );
-        }
-
-        if !text_service_registered() {
-            let manager = unsafe { profile_manager()? };
-            let desc: Vec<u16> = "InputKey".encode_utf16().collect();
-            let icon: Vec<u16> = Vec::new();
+    if let Ok(categories) = unsafe { categories() } {
+        for category in [
+            GUID_TFCAT_TIP_KEYBOARD,
+            GUID_TFCAT_TIPCAP_IMMERSIVESUPPORT,
+            GUID_TFCAT_TIPCAP_SYSTRAYSUPPORT,
+            GUID_TFCAT_TIPCAP_TSF3,
+        ] {
             unsafe {
-                let _ = manager.RegisterProfile(
+                let _ = categories.RegisterCategory(
                     &CLSID_INPUTKEY_TEXT_SERVICE,
-                    INPUTKEY_LANGID,
-                    &GUID_INPUTKEY_PROFILE,
-                    &desc,
-                    &icon,
-                    0,
-                    HKL::default(),
-                    0,
-                    true,
-                    0,
+                    &category,
+                    &CLSID_INPUTKEY_TEXT_SERVICE,
                 );
-            }
-        }
-
-        if !text_service_registered() {
-            register_user_tip_state()?;
-        }
-
-        if !text_service_registered() {
-            return Err(Error::new(
-                HRESULT(0x80004005u32 as i32),
-                "TSF current-user profile registration did not materialize",
-            ));
-        }
-
-        if let Ok(categories) = unsafe { categories() } {
-            for category in [
-                GUID_TFCAT_TIP_KEYBOARD,
-                GUID_TFCAT_TIPCAP_IMMERSIVESUPPORT,
-                GUID_TFCAT_TIPCAP_SYSTRAYSUPPORT,
-                GUID_TFCAT_TIPCAP_TSF3,
-            ] {
-                unsafe {
-                    let _ = categories.RegisterCategory(
-                        &CLSID_INPUTKEY_TEXT_SERVICE,
-                        &category,
-                        &CLSID_INPUTKEY_TEXT_SERVICE,
-                    );
-                }
             }
         }
     }
 
-    unsafe {
-        profiles
-            .EnableLanguageProfile(
+    if let Ok(profiles) = unsafe { profiles() } {
+        unsafe {
+            let _ = profiles.EnableLanguageProfile(
                 &CLSID_INPUTKEY_TEXT_SERVICE,
                 INPUTKEY_LANGID,
                 &GUID_INPUTKEY_PROFILE,
                 true,
-            )
-            .map_err(|e| Error::new(e.code(), "TSF EnableLanguageProfile"))?;
+            );
+        }
     }
 
-    if text_service_available() {
+    if text_service_registered() && text_service_bound() {
         Ok(())
     } else {
         Err(Error::new(
             HRESULT(0x80004005u32 as i32),
-            "TSF current-user profile is not enabled after registration",
+            "TSF current-user registration did not materialize",
         ))
     }
 }
 
 pub fn text_service_available() -> bool {
-    if !text_service_registered() {
-        return false;
-    }
-    let Ok(profiles) = (unsafe { profiles() }) else {
-        return false;
-    };
-    unsafe {
-        profiles
-            .IsEnabledLanguageProfile(
-                &CLSID_INPUTKEY_TEXT_SERVICE,
-                INPUTKEY_LANGID,
-                &GUID_INPUTKEY_PROFILE,
-            )
-            .is_ok_and(|enabled| enabled.as_bool())
-    }
+    text_service_registered() && text_service_bound()
 }
 
 pub fn text_service_active() -> bool {
