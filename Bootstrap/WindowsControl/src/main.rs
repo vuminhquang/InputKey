@@ -235,11 +235,18 @@ fn main() {
             install_text_service();
         }),
         remove_windows_integration: Arc::new(move || {
-            if !tsf_com_ready {
-                return false;
+            #[cfg(windows)]
+            {
+                if !tsf_com_ready {
+                    return false;
+                }
+                let _ = inputkey_windows_tsf::disable_text_service();
+                inputkey_windows_tsf::unregister_text_service().is_ok()
             }
-            let _ = inputkey_windows_tsf::disable_text_service();
-            inputkey_windows_tsf::unregister_text_service().is_ok()
+            #[cfg(not(windows))]
+            {
+                false
+            }
         }),
         text_service_available: Arc::new(move || {
             tsf_com_ready && inputkey_windows_tsf::text_service_available()
