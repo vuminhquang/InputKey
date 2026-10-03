@@ -327,29 +327,10 @@ fn cancel_preference_cannot_override_explicit_repeat() {
 }
 
 #[test]
-fn bracket_shortcut_repeat_cancel() {
-    for (key, shaped, cancelled) in [('[', "ư", "["), (']', "ơ", "]")] {
-        for auto_restore in [false, true] {
-            let mut opts = options("telex", false, auto_restore);
-            opts.double_cancel = false;
-            opts.cancel_preference = "english".to_owned();
-            let mut machine = Machine::new(opts, Some(Box::new(Words)));
-
-            assert_eq!(machine.character(key), shaped);
-            assert_eq!(machine.character(key), cancelled);
-            assert_eq!(machine.control(CompositionControl::Backspace), shaped);
-            assert_eq!(machine.character(key), cancelled);
-            assert_eq!(machine.lifecycle(LifecycleEvent::Finalize), cancelled);
-            assert!(!machine.active());
-            assert_eq!(machine.control(CompositionControl::Backspace), "");
-
-            let mut continued =
-                Machine::new(options("telex", false, auto_restore), Some(Box::new(Words)));
-            assert_eq!(continued.character(key), shaped);
-            assert_eq!(continued.character(key), cancelled);
-            assert_eq!(continued.character(key), format!("{cancelled}{key}"));
-        }
-    }
+fn bracket_keys_are_not_vietnamese_shortcuts() {
+    let machine = Machine::new(options("telex", false, true), Some(Box::new(Words)));
+    assert!(!machine.accepts_character('['));
+    assert!(!machine.accepts_character(']'));
 }
 
 #[test]
@@ -527,10 +508,6 @@ fn repeat_cancel_cannot_be_disabled() {
         ("telex", "coffee", "coffee"),
         ("telex", "tesst", "test"),
         ("vni", "doc11", "doc1"),
-        ("telex", "[[", "["),
-        ("telex", "]]", "]"),
-        ("telex", "[[[", "[["),
-        ("telex", "]]]", "]]"),
     ];
 
     for legacy in [false, true] {
@@ -661,6 +638,51 @@ fn speculative_invalid_telex_rolls_back_on_the_next_key() {
     }
     assert_eq!(space.displayed(), "mỏe");
     assert_eq!(space.space_boundary(), "more ");
+}
+
+#[test]
+fn boundary_correction_preserves_physical_prefix() {
+    let opts = options("telex", false, true);
+
+    for raw in ["stop", "start", "store"] {
+        assert_eq!(run(raw, opts.clone()), raw, "physical onset: {raw}");
+
+        let mut punctuation = root(opts.clone());
+        for key in raw.chars() {
+            punctuation.character(key);
+        }
+        assert_eq!(
+            punctuation.punctuation_boundary('.'),
+            format!("{raw}."),
+            "punctuation onset: {raw}"
+        );
+    }
+
+    for raw in ["as", "af", "ar", "ax", "aj"] {
+        let corrected = run(raw, opts.clone());
+        assert!(
+            corrected.starts_with([
+                'a', 'á', 'à', 'ả', 'ã', 'ạ', 'ă', 'ắ', 'ằ', 'ẳ', 'ẵ', 'ặ', 'â', 'ấ', 'ầ', 'ẩ',
+                'ẫ', 'ậ'
+            ]),
+            "a-family escaped for {raw}: {corrected}"
+        );
+    }
+
+    for (raw, family) in [
+        ("es", "eéèẻẽẹêếềểễệ"),
+        ("os", "oóòỏõọôốồổỗộơớờởỡợ"),
+        ("us", "uúùủũụưứừửữự"),
+        ("is", "iíìỉĩị"),
+        ("ys", "yýỳỷỹỵ"),
+    ] {
+        let corrected = run(raw, opts.clone());
+        let first = corrected.chars().next().expect("boundary output");
+        assert!(
+            family.contains(first),
+            "initial vowel family changed for {raw}: {corrected}"
+        );
+    }
 }
 
 #[test]

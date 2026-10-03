@@ -1,3 +1,9 @@
+# 5.2.2
+
+- Boundary smart correction now preserves the physical initial consonant sequence, preventing cases such as `stop` being reinterpreted as `tóp` by consuming the leading `s` as a tone key.
+- Vowel-initial correction is constrained to the same initial vowel family: `a` may become `a/ă/â`, `e` may become `e/ê`, `o` may become `o/ô/ơ`, and `u` may become `u/ư`; correction cannot invent a different initial consonant or vowel family.
+- Removed the legacy `[` → `ư` and `]` → `ơ` Telex shortcuts; brackets now remain ordinary punctuation.
+
 # 5.2.1
 
 - Windows portable builds now keep all binaries in one self-contained folder, automatically rebind the existing TSF COM registration to the `InputKeyTSF.dll` beside the running `InputKey.exe`, and reuse the same stable TSF CLSID/profile across upgrades instead of creating version-specific registrations.

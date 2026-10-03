@@ -113,6 +113,22 @@ test('Space decides whether an unfinished Vietnamese shape survives', () => {
   assert.equal(input.value, 'thaas ');
 });
 
+test('boundary correction preserves the physical initial prefix', () => {
+  const input = new Input();
+  type(input, 'stop');
+  send(input, ' ');
+  assert.equal(input.value, 'stop ');
+});
+
+test('brackets stay punctuation instead of Vietnamese shape shortcuts', () => {
+  const input = new Input();
+  type(input, 'u');
+  send(input, '[');
+  assert.equal(input.value, 'u[');
+  send(input, ']');
+  assert.equal(input.value, 'u[]');
+});
+
 test('punctuation boundary shares Vietnamese correction policy', () => {
   const input = new Input();
   type(input, 'dduwocj');
@@ -217,7 +233,7 @@ test('Rust WASM is self-contained and exposes the language-neutral ABI', async (
 
 test('manifest uses only the Rust bridge and InputKey WASM', () => {
   const manifest = JSON.parse(readFileSync(path.join(__dirname, 'manifest.json'), 'utf8'));
-  assert.equal(manifest.version, '5.2.1');
+  assert.equal(manifest.version, '5.2.2');
   assert.deepEqual(manifest.content_scripts[0].js, ['engine_wasm.js', 'shortcut.js', 'content.js']);
   assert.deepEqual(manifest.web_accessible_resources[0].resources, ['inputkey.wasm']);
 });

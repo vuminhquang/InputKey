@@ -41,11 +41,11 @@ The FSM supports context-aware late transitions such as:
 - `chueyern → chuyển`
 - `dduocwj → được`
 
-High-confidence correction only rearranges or applies intents that were actually typed; it does not invent a missing tone key. The resolver runs once from the root-owned Space boundary, not during live key transitions. Live Telex remains sequential, while explicit repeat-cancel remains an immediate character-level transition.
+High-confidence correction only rearranges or applies intents that were actually typed; it does not invent a missing tone key. At Space/Punctuation boundaries it also preserves the physical initial prefix: a typed consonant onset cannot be consumed as a modifier, and a vowel-initial token can only remain in the same initial vowel family (`a/ă/â`, `e/ê`, `o/ô/ơ`, `u/ư`, `i`, `y`). The resolver runs once from the root-owned boundary, not during live key transitions. Live Telex remains sequential, while explicit repeat-cancel remains an immediate character-level transition.
 
 Repeating the immediately preceding shape/stroke operation cancels it even when
 its target precedes the coda: `dataa → data`, `dayaa → daya`, `banww → banw`.
-Backspace restores the state before the cancel. A further repeated key is literal. The `[` → `ư` and `]` → `ơ` shortcuts follow the same rule: `[[` → `[` and `]]` → `]`.
+Backspace restores the state before the cancel. A further repeated key is literal. Bracket keys are ordinary punctuation and are not Vietnamese shape shortcuts.
 
 ## Ending a composition
 

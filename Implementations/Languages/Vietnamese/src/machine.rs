@@ -1139,6 +1139,41 @@ fn intent_preference(raw: &str, rendered: &str) -> isize {
     score
 }
 
+fn onset_base(bytes: &[u8]) -> Vec<u8> {
+    let end = bytes
+        .iter()
+        .position(|byte| matches!(*byte, b'a' | b'e' | b'i' | b'o' | b'u' | b'y'))
+        .unwrap_or(bytes.len());
+    let onset = &bytes[..end];
+    if onset.starts_with(b"dd") {
+        let mut normalized = Vec::with_capacity(onset.len() - 1);
+        normalized.push(b'd');
+        normalized.extend_from_slice(&onset[2..]);
+        normalized
+    } else {
+        onset.to_vec()
+    }
+}
+
+fn initial_vowel_family(bytes: &[u8]) -> Option<u8> {
+    bytes.first().copied().and_then(|first| match first {
+        b'a' | b'e' | b'i' | b'o' | b'u' | b'y' => Some(first),
+        _ => None,
+    })
+}
+
+fn preserves_physical_prefix(raw: &str, candidate: &TelexIntentCandidate) -> bool {
+    let raw = raw.to_ascii_lowercase();
+    let raw_bytes = raw.as_bytes();
+    if onset_base(raw_bytes) != onset_base(&candidate.base) {
+        return false;
+    }
+    match initial_vowel_family(raw_bytes) {
+        Some(family) => initial_vowel_family(&candidate.base) == Some(family),
+        None => true,
+    }
+}
+
 fn resolve_telex_intent(raw: &str) -> Option<String> {
     if raw.len() < 3 || !raw.chars().all(|c| c.is_ascii_alphabetic()) {
         return None;
@@ -1147,6 +1182,7 @@ fn resolve_telex_intent(raw: &str) -> Option<String> {
     let candidates = telex_intent_index().get(&signature)?;
     let mut ranked: Vec<(isize, &TelexIntentCandidate)> = candidates
         .iter()
+        .filter(|candidate| preserves_physical_prefix(raw, candidate))
         .filter(|candidate| ordered_telex_intent_matches(raw, candidate, true))
         .map(|candidate| (intent_preference(raw, &candidate.rendered), candidate))
         .collect();
@@ -1507,35 +1543,6 @@ impl Machine {
         changed
     }
 
-    fn repeats_bracket_shape(&self, key: char) -> bool {
-        if self.options.simple_telex
-            || !self.options.method.eq_ignore_ascii_case("telex")
-            || self.history.len() < 2
-        {
-            return false;
-        }
-        let expected = match key {
-            '[' => 'ư',
-            ']' => 'ơ',
-            _ => return false,
-        };
-        let current = &self.history[self.history.len() - 1];
-        let before = &self.history[self.history.len() - 2];
-        if current.raw != format!("{}{}", before.raw, key) || current.tone != before.tone {
-            return false;
-        }
-        if current.chars.len() != before.chars.len() + 1 {
-            return false;
-        }
-        if current.chars[..before.chars.len()] != before.chars {
-            return false;
-        }
-        current
-            .chars
-            .last()
-            .is_some_and(|c| lower_char(strip_tone(*c)) == expected)
-    }
-
     fn choose_ambiguous_literal(&self, _final: bool) -> String {
         let raw_hit = self
             .lexicon
@@ -1689,16 +1696,6 @@ impl Machine {
             }
         }
 
-        if !self.options.simple_telex && key == '[' {
-            self.chars.push('ư');
-            self.transformed = true;
-            return;
-        }
-        if !self.options.simple_telex && key == ']' {
-            self.chars.push('ơ');
-            self.transformed = true;
-            return;
-        }
         self.chars.push(key);
     }
 
@@ -1859,11 +1856,6 @@ impl Machine {
         }
 
         self.fallback.push(key);
-
-        if self.repeats_bracket_shape(key) {
-            self.lock_literal_escape();
-            return self.rendered.clone();
-        }
 
         if self.mode == Mode::RawLocked {
             if self.recover_known_raw_after_cancel() {
@@ -2057,7 +2049,7 @@ impl LanguageMachinePort for Machine {
         if self.options.method.eq_ignore_ascii_case("vni") {
             character.is_ascii_alphanumeric()
         } else {
-            character.is_ascii_alphabetic() || matches!(character, '[' | ']')
+            character.is_ascii_alphabetic()
         }
     }
 
@@ -2108,5 +2100,32 @@ impl LanguageMachinePort for Machine {
             }
             .to_owned(),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn candidate(base: &str) -> TelexIntentCandidate {
+        TelexIntentCandidate {
+            rendered: base.to_owned(),
+            base: base.as_bytes().to_vec(),
+            modifiers: [0; 26],
+            encoded_len: base.len(),
+        }
+    }
+
+    #[test]
+    fn boundary_prefix_guard_preserves_onset_and_initial_vowel_family() {
+        assert!(!preserves_physical_prefix("stop", &candidate("top")));
+        assert!(preserves_physical_prefix("stop", &candidate("stop")));
+        assert!(preserves_physical_prefix("dduwocj", &candidate("duoc")));
+
+        assert!(preserves_physical_prefix("as", &candidate("an")));
+        assert!(!preserves_physical_prefix("as", &candidate("en")));
+        assert!(!preserves_physical_prefix("as", &candidate("ban")));
+        assert!(preserves_physical_prefix("os", &candidate("on")));
+        assert!(!preserves_physical_prefix("os", &candidate("un")));
     }
 }
