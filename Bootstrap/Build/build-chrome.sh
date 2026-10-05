@@ -6,6 +6,7 @@ EXT="$ROOT/Implementations/Chrome/extension"
 DIST="$ROOT/dist/chrome"
 STAGE="$ROOT/dist/.chrome-stage"
 
+python3 "$ROOT/Bootstrap/Build/sync-version.py" --check
 python3 "$ROOT/Bootstrap/Build/check-chrome-ui.py"
 
 rustup target add wasm32-unknown-unknown

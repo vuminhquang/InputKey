@@ -25,6 +25,9 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y cmake pkg-config zip gcc g++ libibus-1.0-dev libfcitx5core-dev libgtk-3-dev
 
+      - name: Version SSOT
+        run: python3 Bootstrap/Build/sync-version.py --check
+
       - name: Architecture
         run: python3 Bootstrap/Build/check-architecture.py
 
@@ -70,6 +73,9 @@ jobs:
       - uses: dtolnay/rust-toolchain@1.96.0
         with:
           components: rustfmt, clippy
+
+      - name: Version SSOT
+        run: python Bootstrap/Build/sync-version.py --check
 
       - name: Architecture
         run: python Bootstrap/Build/check-architecture.py
@@ -121,6 +127,9 @@ jobs:
       - uses: dtolnay/rust-toolchain@1.96.0
         with:
           components: rustfmt, clippy
+
+      - name: Version SSOT
+        run: python3 Bootstrap/Build/sync-version.py --check
 
       - name: Architecture
         run: python3 Bootstrap/Build/check-architecture.py
@@ -186,6 +195,8 @@ jobs:
         run: |
           set -euo pipefail
           VERSION="${GITHUB_REF_NAME#v}"
+          EXPECTED="$(tr -d '\r\n' < VERSION)"
+          test "$VERSION" = "$EXPECTED"
           mkdir -p release/out
           cp "release/chromium/InputKey-$VERSION.zip" "release/out/InputKey-Chromium-$VERSION.zip"
           cp "release/linux/InputKey-Linux-x86_64-$VERSION.zip" "release/out/InputKey-Linux-x86_64-$VERSION.zip"

@@ -4,6 +4,7 @@ ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
 VERSION=$(tr -d '\r\n' < "$ROOT/VERSION")
 cd "$ROOT"
 
+python3 Bootstrap/Build/sync-version.py --check
 cargo build --release -p inputkey-cabi
 
 clang -fobjc-arc -framework Cocoa -framework InputMethodKit \

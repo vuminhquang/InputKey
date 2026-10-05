@@ -10,11 +10,11 @@ checksum = "4e7648175b45a9a48536d676f68d918270699102aa8dab5496df06904c914600"
 
 [[package]]
 name = "inputkey-boundary"
-version = "5.2.8"
+version = "5.2.10"
 
 [[package]]
 name = "inputkey-cabi"
-version = "5.2.8"
+version = "5.2.10"
 dependencies = [
  "inputkey-boundary",
  "inputkey-core-abstractions",
@@ -24,39 +24,39 @@ dependencies = [
 
 [[package]]
 name = "inputkey-core-abstractions"
-version = "5.2.8"
+version = "5.2.10"
 
 [[package]]
 name = "inputkey-english-bloom"
-version = "5.2.8"
+version = "5.2.10"
 dependencies = [
  "inputkey-core-abstractions",
 ]
 
 [[package]]
 name = "inputkey-event-bus"
-version = "5.2.8"
+version = "5.2.10"
 dependencies = [
  "inputkey-core-abstractions",
 ]
 
 [[package]]
 name = "inputkey-language-french"
-version = "5.2.8"
+version = "5.2.10"
 dependencies = [
  "inputkey-core-abstractions",
 ]
 
 [[package]]
 name = "inputkey-language-germanic"
-version = "5.2.8"
+version = "5.2.10"
 dependencies = [
  "inputkey-core-abstractions",
 ]
 
 [[package]]
 name = "inputkey-language-pack-abi"
-version = "5.2.8"
+version = "5.2.10"
 dependencies = [
  "inputkey-core-abstractions",
  "serde_json",
@@ -64,7 +64,7 @@ dependencies = [
 
 [[package]]
 name = "inputkey-language-pack-danish"
-version = "5.2.8"
+version = "5.2.10"
 dependencies = [
  "inputkey-language-germanic",
  "inputkey-language-pack-abi",
@@ -73,7 +73,7 @@ dependencies = [
 
 [[package]]
 name = "inputkey-language-pack-french"
-version = "5.2.8"
+version = "5.2.10"
 dependencies = [
  "inputkey-language-french",
  "inputkey-language-pack-abi",
@@ -82,7 +82,7 @@ dependencies = [
 
 [[package]]
 name = "inputkey-language-pack-german"
-version = "5.2.8"
+version = "5.2.10"
 dependencies = [
  "inputkey-language-germanic",
  "inputkey-language-pack-abi",
@@ -91,7 +91,7 @@ dependencies = [
 
 [[package]]
 name = "inputkey-language-pack-loader"
-version = "5.2.8"
+version = "5.2.10"
 dependencies = [
  "inputkey-core-abstractions",
  "inputkey-language-pack-native-abi",
@@ -103,11 +103,11 @@ dependencies = [
 
 [[package]]
 name = "inputkey-language-pack-native-abi"
-version = "5.2.8"
+version = "5.2.10"
 
 [[package]]
 name = "inputkey-language-pack-swedish"
-version = "5.2.8"
+version = "5.2.10"
 dependencies = [
  "inputkey-language-germanic",
  "inputkey-language-pack-abi",
@@ -116,7 +116,7 @@ dependencies = [
 
 [[package]]
 name = "inputkey-language-pack-vietnamese"
-version = "5.2.8"
+version = "5.2.10"
 dependencies = [
  "inputkey-english-bloom",
  "inputkey-language-pack-abi",
@@ -126,14 +126,14 @@ dependencies = [
 
 [[package]]
 name = "inputkey-language-vietnamese"
-version = "5.2.8"
+version = "5.2.10"
 dependencies = [
  "inputkey-core-abstractions",
 ]
 
 [[package]]
 name = "inputkey-operators"
-version = "5.2.8"
+version = "5.2.10"
 dependencies = [
  "inputkey-boundary",
  "inputkey-core-abstractions",
@@ -141,7 +141,7 @@ dependencies = [
 
 [[package]]
 name = "inputkey-runtime"
-version = "5.2.8"
+version = "5.2.10"
 dependencies = [
  "inputkey-boundary",
  "inputkey-core-abstractions",
@@ -156,7 +156,7 @@ dependencies = [
 
 [[package]]
 name = "inputkey-wasm"
-version = "5.2.8"
+version = "5.2.10"
 dependencies = [
  "inputkey-boundary",
  "inputkey-operators",
@@ -165,14 +165,14 @@ dependencies = [
 
 [[package]]
 name = "inputkey-windows-clipboard"
-version = "5.2.8"
+version = "5.2.10"
 dependencies = [
  "windows",
 ]
 
 [[package]]
 name = "inputkey-windows-control"
-version = "5.2.8"
+version = "5.2.10"
 dependencies = [
  "inputkey-core-abstractions",
  "inputkey-windows-settings",
@@ -181,7 +181,7 @@ dependencies = [
 
 [[package]]
 name = "inputkey-windows-control-bootstrap"
-version = "5.2.8"
+version = "5.2.10"
 dependencies = [
  "inputkey-core-abstractions",
  "inputkey-runtime",
@@ -194,7 +194,7 @@ dependencies = [
 
 [[package]]
 name = "inputkey-windows-hook"
-version = "5.2.8"
+version = "5.2.10"
 dependencies = [
  "inputkey-core-abstractions",
  "inputkey-windows-clipboard",
@@ -205,14 +205,14 @@ dependencies = [
 
 [[package]]
 name = "inputkey-windows-settings"
-version = "5.2.8"
+version = "5.2.10"
 dependencies = [
  "windows-sys",
 ]
 
 [[package]]
 name = "inputkey-windows-tsf"
-version = "5.2.8"
+version = "5.2.10"
 dependencies = [
  "inputkey-core-abstractions",
  "inputkey-windows-settings",
@@ -222,7 +222,7 @@ dependencies = [
 
 [[package]]
 name = "inputkey-windows-tsf-bootstrap"
-version = "5.2.8"
+version = "5.2.10"
 dependencies = [
  "inputkey-core-abstractions",
  "inputkey-runtime",

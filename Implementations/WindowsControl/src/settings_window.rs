@@ -247,7 +247,7 @@ unsafe fn create_control(
 
 unsafe fn show_shortcut_error(parent: HWND) {
     let title = wide("Invalid toggle shortcut");
-    let message = wide("Use combinations such as Ctrl+Shift, Alt+Z, or Ctrl+Shift+K. Type Off to disable the shortcut. Ctrl+Alt combinations are reserved to avoid breaking AltGr input.");
+    let message = wide("Use combinations such as Ctrl+Shift, Alt+Z, or Ctrl+Shift+K. Modifier-only Ctrl+Shift requires both keys on the same side. Type Off to disable the shortcut. Ctrl+Alt combinations are reserved to avoid breaking AltGr input.");
     unsafe {
         MessageBoxW(
             parent,
@@ -397,7 +397,7 @@ unsafe fn build_controls(parent: HWND) {
         create_control(
             parent,
             "STATIC",
-            "Examples: Ctrl+Shift, Alt+Z, Ctrl+Shift+K. Use Off to disable. Ctrl+Alt is reserved for AltGr.",
+            "Examples: Ctrl+Shift, Alt+Z, Ctrl+Shift+K. Modifier-only Ctrl+Shift uses Left+Left or Right+Right only. Use Off to disable. Ctrl+Alt is reserved for AltGr.",
             0,
             24,
             372,

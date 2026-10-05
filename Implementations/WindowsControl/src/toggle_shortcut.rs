@@ -13,8 +13,14 @@ const MOD_SHIFT: u8 = 4;
 const MOD_WIN: u8 = 8;
 const TARGET_SET: u32 = 1 << 31;
 
+const SIDE_LCTRL: u8 = 1;
+const SIDE_RCTRL: u8 = 2;
+const SIDE_LSHIFT: u8 = 4;
+const SIDE_RSHIFT: u8 = 8;
+
 static TARGET: AtomicU32 = AtomicU32::new(0);
 static MODIFIERS: AtomicU8 = AtomicU8::new(0);
+static PHYSICAL_MODIFIERS: AtomicU8 = AtomicU8::new(0);
 static OWNER: AtomicIsize = AtomicIsize::new(0);
 static SUPPRESS_0: AtomicU64 = AtomicU64::new(0);
 static SUPPRESS_1: AtomicU64 = AtomicU64::new(0);
@@ -48,6 +54,34 @@ fn modifier_bit(vk: u32) -> u8 {
         0x5b | 0x5c => MOD_WIN,
         _ => 0,
     }
+}
+
+fn physical_modifier_bit(vk: u32, scan_code: u32, flags: u32) -> u8 {
+    match vk {
+        x if x == VK_LCONTROL as u32 => SIDE_LCTRL,
+        x if x == VK_RCONTROL as u32 => SIDE_RCTRL,
+        x if x == VK_CONTROL as u32 => {
+            if flags & LLKHF_EXTENDED != 0 {
+                SIDE_RCTRL
+            } else {
+                SIDE_LCTRL
+            }
+        }
+        x if x == VK_LSHIFT as u32 => SIDE_LSHIFT,
+        x if x == VK_RSHIFT as u32 => SIDE_RSHIFT,
+        x if x == VK_SHIFT as u32 => {
+            if scan_code == 0x36 {
+                SIDE_RSHIFT
+            } else {
+                SIDE_LSHIFT
+            }
+        }
+        _ => 0,
+    }
+}
+
+fn same_side_ctrl_shift(physical: u8) -> bool {
+    physical == (SIDE_LCTRL | SIDE_LSHIFT) || physical == (SIDE_RCTRL | SIDE_RSHIFT)
 }
 
 fn parse_key(token: &str) -> Option<u16> {
@@ -249,6 +283,14 @@ unsafe extern "system" fn keyboard_proc(code: i32, wp: WPARAM, lp: LPARAM) -> LR
 
     let vk = data.vkCode;
     let modifier = modifier_bit(vk);
+    let physical_modifier = physical_modifier_bit(vk, data.scanCode, data.flags);
+    let physical_modifiers = if physical_modifier == 0 {
+        PHYSICAL_MODIFIERS.load(Ordering::Acquire)
+    } else if down {
+        PHYSICAL_MODIFIERS.fetch_or(physical_modifier, Ordering::AcqRel) | physical_modifier
+    } else {
+        PHYSICAL_MODIFIERS.fetch_and(!physical_modifier, Ordering::AcqRel) & !physical_modifier
+    };
     let modifiers = if modifier == 0 {
         MODIFIERS.load(Ordering::Acquire)
     } else if down {
@@ -264,7 +306,9 @@ unsafe extern "system" fn keyboard_proc(code: i32, wp: WPARAM, lp: LPARAM) -> LR
         return unsafe { CallNextHookEx(std::ptr::null_mut(), code, wp, lp) };
     };
     let matched = if target.vk == 0 {
-        down && modifier != 0 && modifiers == target.modifiers
+        let side_matches =
+            target.modifiers != (MOD_CTRL | MOD_SHIFT) || same_side_ctrl_shift(physical_modifiers);
+        down && modifier != 0 && modifiers == target.modifiers && side_matches
     } else {
         down && modifier == 0 && vk == u32::from(target.vk) && modifiers == target.modifiers
     };
@@ -294,6 +338,7 @@ impl Drop for Hook {
         OWNER.store(0, Ordering::Release);
         TARGET.store(0, Ordering::Release);
         MODIFIERS.store(0, Ordering::Release);
+        PHYSICAL_MODIFIERS.store(0, Ordering::Release);
     }
 }
 
@@ -313,6 +358,31 @@ pub fn install(owner: HWND) -> Option<Hook> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn modifier_only_ctrl_shift_requires_one_physical_side() {
+        assert!(same_side_ctrl_shift(SIDE_LCTRL | SIDE_LSHIFT));
+        assert!(same_side_ctrl_shift(SIDE_RCTRL | SIDE_RSHIFT));
+        assert!(!same_side_ctrl_shift(SIDE_LCTRL | SIDE_RSHIFT));
+        assert!(!same_side_ctrl_shift(SIDE_RCTRL | SIDE_LSHIFT));
+        assert!(!same_side_ctrl_shift(
+            SIDE_LCTRL | SIDE_LSHIFT | SIDE_RSHIFT
+        ));
+    }
+
+    #[test]
+    fn physical_modifier_mapping_distinguishes_ctrl_and_shift_sides() {
+        assert_eq!(
+            physical_modifier_bit(VK_LCONTROL as u32, 0x1d, 0),
+            SIDE_LCTRL
+        );
+        assert_eq!(
+            physical_modifier_bit(VK_CONTROL as u32, 0x1d, LLKHF_EXTENDED),
+            SIDE_RCTRL
+        );
+        assert_eq!(physical_modifier_bit(VK_SHIFT as u32, 0x2a, 0), SIDE_LSHIFT);
+        assert_eq!(physical_modifier_bit(VK_SHIFT as u32, 0x36, 0), SIDE_RSHIFT);
+    }
 
     #[test]
     fn normalizes_supported_shortcuts() {

@@ -46,6 +46,9 @@ for required in [
 
 if "let _ = self.install_mouse_tracking(ec, mouse_sink);" not in service:
     errors.append("WindowsTSF mouse tracking must be best-effort inside the owned update edit session")
+for required in ["self.context.GetStart(ec)?", "self.context.GetEnd(ec)?", "range.ShiftEndToRange(ec, &end, TF_ANCHOR_END)?"]:
+    if required not in service:
+        errors.append(f"WindowsTSF mouse tracking must cover the whole document when the host supports it: {required}")
 if "ensure_mouse_tracking" in service:
     errors.append("WindowsTSF must not open a second post-key mouse-tracking edit session")
 
@@ -120,13 +123,24 @@ for label, text, required in [
         errors.append(f"{label} missing current-user TSF invariant: {required}")
 
 if "let _ = ensure_packaged_text_service();" not in control:
-    errors.append("InputKey startup must automatically register/repair/activate the current-user TSF service")
+    errors.append("InputKey startup must automatically register/repair the current-user TSF service and request activation")
 
 if "inputkey_windows_tsf::register_text_service(" in control:
     errors.append("InputKey.exe must isolate TSF registration in InputKeyTSFRegister.exe")
 
 if "installed_now = !inputkey_windows_tsf::text_service_registered()" not in control:
     errors.append("Install/Repair Text Service must distinguish a new current-user registration")
+
+for required in [
+    "test_phase_commit_then_pass_key",
+    "commit_test_phase_boundary",
+    "Microsoft TSF permits edit-session work during the test phase",
+    "return Ok(BOOL::from(false));",
+]:
+    if required not in service:
+        errors.append(
+            f"WindowsTSF Enter must commit during OnTestKeyDown then pass the original physical key: {required}"
+        )
 
 if errors:
     print("Windows TSF contract violation:")
@@ -135,7 +149,9 @@ if errors:
     sys.exit(1)
 
 print(
-    "Windows TSF contract passed: TSF remains the primary current-user path, "
-    "InputKey auto-registers/repairs/activates its user-wide profile without elevation, "
-    "and Remove Windows integration can unregister that profile from the user scope."
+    "Windows TSF contract passed: TSF remains the primary current-user path; "
+    "InputKey auto-registers/repairs its user-wide profile without elevation and requests activation, "
+    "Enter commits in the TSF test phase before the original physical key reaches the host, "
+    "whole-document mouse tracking is best-effort, "
+    "and compatibility remains available when Windows or the host does not provide those TSF capabilities."
 )

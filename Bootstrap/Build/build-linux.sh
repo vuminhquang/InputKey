@@ -10,6 +10,7 @@ IBUS_BUILD="$ROOT/target/ibus"
 
 cd "$ROOT"
 
+python3 Bootstrap/Build/sync-version.py --check
 cargo build --release -p inputkey-cabi
 python3 Bootstrap/Build/cabi-smoke.py
 

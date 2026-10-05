@@ -6,6 +6,9 @@ $Stage = Join-Path $Root "dist\.chrome-stage"
 
 Push-Location $Root
 try {
+    python Bootstrap\Build\sync-version.py --check
+    if ($LASTEXITCODE) { throw "Version SSOT check failed" }
+
     python Bootstrap\Build\check-chrome-ui.py
     if ($LASTEXITCODE) { throw "Chrome UI contract failed" }
 

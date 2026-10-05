@@ -247,7 +247,9 @@ test('Rust WASM is self-contained and exposes the language-neutral ABI', async (
 
 test('manifest uses only the Rust bridge and InputKey WASM', () => {
   const manifest = JSON.parse(readFileSync(path.join(__dirname, 'manifest.json'), 'utf8'));
-  assert.equal(manifest.version, '5.2.6');
+  const version = readFileSync(path.join(__dirname, '..', '..', '..', 'VERSION'), 'utf8').trim();
+  assert.equal(manifest.version, version);
+  assert.equal(manifest.version_name, version);
   assert.deepEqual(manifest.content_scripts[0].js, ['engine_wasm.js', 'shortcut.js', 'content.js']);
   assert.deepEqual(manifest.web_accessible_resources[0].resources, ['inputkey.wasm']);
 });

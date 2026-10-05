@@ -1,8 +1,6 @@
 $ErrorActionPreference = "Stop"
 $Root = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
-$VersionLine = Select-String -Path (Join-Path $Root "Cargo.toml") -Pattern '^version = "([^"]+)"$' | Select-Object -First 1
-if (-not $VersionLine) { throw "Workspace version not found" }
-$Version = $VersionLine.Matches[0].Groups[1].Value
+$Version = (Get-Content (Join-Path $Root "VERSION") -Raw).Trim()
 $Target = Join-Path $Root ("target\windows-" + $Version)
 $Stage = Join-Path $env:TEMP ("InputKey-Windows-" + $Version + "-" + $PID)
 $DistDir = Join-Path $Root ("dist\InputKey-Windows-" + $Version)
@@ -12,6 +10,9 @@ $RestartInputKey = $false
 
 Push-Location $Root
 try {
+    python Bootstrap\Build\sync-version.py --check
+    if ($LASTEXITCODE) { throw "Version SSOT check failed" }
+
     python Bootstrap\Build\check-architecture.py
     if ($LASTEXITCODE) { throw "Architecture check failed" }
 

@@ -1,3 +1,20 @@
+# 5.2.10
+
+- Made root `VERSION` the release-version source of truth and added CI checks that keep Rust, Chromium, Linux CMake, and macOS bundle metadata synchronized with it; release tags must match `VERSION`.
+- The default modifier-only `Ctrl+Shift` toggle now requires both modifiers from the same side of the keyboard: Left Ctrl + Left Shift or Right Ctrl + Right Shift.
+- Windows TSF now finalizes an active composition during `OnTestKeyDown`, before the host processes the original physical Enter; this follows TSF's native keystroke test/edit-session path and does not synthesize or replay Enter.
+- Documented TSF activation as best-effort: InputKey can maintain current-user registration/binding without elevation, while compatibility input remains available when Windows cannot activate the profile in a process/session.
+
+# 5.2.8
+
+- Added InputKey-defined Telex-style language packs for Danish, Swedish, and German, including case-preserving Germanic pair transforms.
+- Extended runtime/catalog, native language DLL packaging, Chromium hints/tests, README, and the landing page for the new language packs.
+
+# 5.2.7
+
+- Added the InputKey landing page and GitHub Pages deployment.
+- Preserved correction casing in the Vietnamese language machine.
+
 # 5.2.6
 
 - Restored `Start with Windows` to a direct current-user `HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run` registration from the tray process; removed the separate startup helper and Startup-folder shortcut path that triggered Defender persistence heuristics.
