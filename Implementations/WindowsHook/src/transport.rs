@@ -203,11 +203,13 @@ pub fn capture(target: HWND, automation: Option<&uia::AutomationText>) -> Captur
         }
         match automation.capture_focused(target as isize, process_id) {
             Ok(owned) => return Capture::Ready(OwnedTransport::Automation(owned)),
+            Err(uia::CaptureError::KeyboardOnly) => keyboard_text_surface = true,
             Err(uia::CaptureError::Denied) => return Capture::Denied,
             Err(uia::CaptureError::Unsupported) => {}
         }
         match automation.focused_keyboard_text_surface(process_id) {
             Ok(supported) => keyboard_text_surface = supported,
+            Err(uia::CaptureError::KeyboardOnly) => keyboard_text_surface = true,
             Err(uia::CaptureError::Denied) => return Capture::Denied,
             Err(uia::CaptureError::Unsupported) => {}
         }

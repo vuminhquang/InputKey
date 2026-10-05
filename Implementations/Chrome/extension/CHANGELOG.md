@@ -1,3 +1,7 @@
+# 5.2.11
+
+- Windows compatibility input now treats Chromium/WebView accessibility editors as keyboard-semantic surfaces instead of rewriting their entire value through UI Automation, preserving rich-editor application state while keeping the capability-based fallback chain generic.
+
 # 5.2.10
 
 - Made root `VERSION` the release-version source of truth and added CI checks that keep Rust, Chromium, Linux CMake, and macOS bundle metadata synchronized with it; release tags must match `VERSION`.

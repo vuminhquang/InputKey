@@ -17,7 +17,12 @@ use windows::{
 #[derive(Debug)]
 pub enum CaptureError {
     Unsupported,
+    KeyboardOnly,
     Denied,
+}
+
+fn framework_requires_keyboard_semantics(framework_id: &str) -> bool {
+    framework_id.eq_ignore_ascii_case("Chrome")
 }
 
 pub struct AutomationText {
@@ -171,6 +176,21 @@ impl AutomationText {
         };
         if control_type != UIA_EditControlTypeId {
             return Err(CaptureError::Unsupported);
+        }
+
+        let framework_id = unsafe {
+            element
+                .CurrentFrameworkId()
+                .map_err(|_| CaptureError::Unsupported)?
+                .to_string()
+        };
+        if framework_requires_keyboard_semantics(&framework_id) {
+            let _: IUIAutomationTextPattern = unsafe {
+                element
+                    .GetCurrentPatternAs(UIA_TextPatternId)
+                    .map_err(|_| CaptureError::Unsupported)?
+            };
+            return Err(CaptureError::KeyboardOnly);
         }
 
         let value: IUIAutomationValuePattern = unsafe {
@@ -368,5 +388,13 @@ mod tests {
     fn automation_joins_the_worker_ole_apartment() {
         let _clipboard = ClipboardPaste::new().expect("OLE clipboard apartment");
         let _automation = AutomationText::new().expect("UI Automation on the same STA worker");
+    }
+
+    #[test]
+    fn chromium_accessibility_uses_keyboard_semantics() {
+        assert!(framework_requires_keyboard_semantics("Chrome"));
+        assert!(framework_requires_keyboard_semantics("chrome"));
+        assert!(!framework_requires_keyboard_semantics("Win32"));
+        assert!(!framework_requires_keyboard_semantics("XAML"));
     }
 }
