@@ -1,3 +1,7 @@
+# 5.2.12
+
+- Windows TSF now finalizes Enter boundaries from the pre-filter key-trace phase, before any target key processing, while always passing the original physical Enter and its modifiers unchanged. This prevents web rich editors from observing a still-active composition around Enter/Shift+Enter without adding synthetic key replay.
+
 # 5.2.11
 
 - Windows compatibility input now treats Chromium/WebView accessibility editors as keyboard-semantic surfaces instead of rewriting their entire value through UI Automation, preserving rich-editor application state while keeping the capability-based fallback chain generic.

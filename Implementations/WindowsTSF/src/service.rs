@@ -80,7 +80,7 @@ fn is_raw_boundary_space(vk: u32, shift: bool, control: bool, alt: bool, win: bo
     vk == VK_SPACE.0 as u32 && shift && !control && !alt && !win
 }
 
-fn test_phase_commit_then_pass_key(vk: u32) -> bool {
+fn passthrough_enter(vk: u32) -> bool {
     vk == VK_RETURN.0 as u32
 }
 
@@ -631,7 +631,7 @@ impl TextService {
     }
 
     fn commit_traced_boundary(&self, vk: u32) {
-        if !self.control.enabled.load(Ordering::Acquire) || test_phase_commit_then_pass_key(vk) {
+        if !self.control.enabled.load(Ordering::Acquire) {
             return;
         }
         let input = if let Some(cause) = caret_move_cause(vk) {
@@ -738,27 +738,6 @@ impl TextService {
         Ok(moved.load(Ordering::Acquire))
     }
 
-    fn commit_test_phase_boundary(&self, context: &ITfContext, vk: u32) -> Result<()> {
-        if !self.control.enabled.load(Ordering::Acquire) || !test_phase_commit_then_pass_key(vk) {
-            return Ok(());
-        }
-
-        if self.validate_caret(context)? {
-            return Ok(());
-        }
-
-        let text = {
-            let mut runtime = self.control.runtime.lock().expect("runtime lock");
-            if !runtime.active() {
-                return Ok(());
-            }
-            runtime
-                .engine
-                .dispatch(RootInput::CaretMoveBoundary(CaretMoveCause::Enter))
-        };
-        request_edit(&self.control, context, EditAction::Commit(text))
-    }
-
     fn commit_caret_move_from_mouse(&self) {
         let text = {
             let mut runtime = self.control.runtime.lock().expect("runtime lock");
@@ -787,9 +766,6 @@ impl TextService {
         }
         let active = self.control.runtime.lock().expect("runtime lock").active();
         if !active {
-            return false;
-        }
-        if test_phase_commit_then_pass_key(vk) {
             return false;
         }
         if caret_move_cause(vk).is_some()
@@ -1026,16 +1002,18 @@ impl ITfKeyEventSink_Impl for TextService_Impl {
         Ok(())
     }
 
-    fn OnTestKeyDown(&self, pic: Ref<ITfContext>, wparam: WPARAM, _lparam: LPARAM) -> Result<BOOL> {
+    fn OnTestKeyDown(
+        &self,
+        _pic: Ref<ITfContext>,
+        wparam: WPARAM,
+        _lparam: LPARAM,
+    ) -> Result<BOOL> {
         let vk = wparam.0 as u32;
-        if test_phase_commit_then_pass_key(vk) {
-            let context = pic.ok()?;
-            if self.commit_test_phase_boundary(context, vk).is_err() {
-                self.fail_open();
-            }
-            // Microsoft TSF permits edit-session work during the test phase of
-            // keystroke handling. Returning false here leaves the original
-            // physical Enter for the host after InputKey's composition ended.
+        if passthrough_enter(vk) {
+            // Enter is committed earlier from ITfKeyTraceEventSink, before TSF
+            // filtering and before the target application can process the key.
+            // The test phase only declines ownership so the original physical
+            // Enter (with modifiers such as Shift) reaches the host unchanged.
             return Ok(BOOL::from(false));
         }
         Ok(BOOL::from(self.should_offer_key(vk)))
@@ -1151,15 +1129,19 @@ pub fn class_factory(factory: EngineFactory, config: EngineConfig) -> IClassFact
 
 #[cfg(test)]
 mod tests {
-    use super::{caret_move_cause, is_raw_boundary_space, test_phase_commit_then_pass_key};
+    use super::{caret_move_cause, is_raw_boundary_space, passthrough_enter};
     use inputkey_core_abstractions::CaretMoveCause;
     use windows::Win32::UI::Input::KeyboardAndMouse::{VK_DELETE, VK_LEFT, VK_RETURN, VK_SPACE};
 
     #[test]
-    fn enter_commits_during_test_phase_then_passes_physical_key() {
-        assert!(test_phase_commit_then_pass_key(VK_RETURN.0 as u32));
-        assert!(!test_phase_commit_then_pass_key(VK_LEFT.0 as u32));
-        assert!(!test_phase_commit_then_pass_key(VK_SPACE.0 as u32));
+    fn enter_is_committed_by_trace_then_test_phase_passes_physical_key() {
+        assert!(passthrough_enter(VK_RETURN.0 as u32));
+        assert!(!passthrough_enter(VK_LEFT.0 as u32));
+        assert!(!passthrough_enter(VK_SPACE.0 as u32));
+        assert_eq!(
+            caret_move_cause(VK_RETURN.0 as u32),
+            Some(CaretMoveCause::Enter)
+        );
     }
 
     #[test]

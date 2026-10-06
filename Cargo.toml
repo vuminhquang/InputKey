@@ -30,6 +30,6 @@ members = [
 resolver = "2"
 
 [workspace.package]
-version = "5.2.11"
+version = "5.2.12"
 edition = "2021"
 license = "GPL-2.0-or-later"

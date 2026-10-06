@@ -132,14 +132,18 @@ if "installed_now = !inputkey_windows_tsf::text_service_registered()" not in con
     errors.append("Install/Repair Text Service must distinguish a new current-user registration")
 
 for required in [
-    "test_phase_commit_then_pass_key",
-    "commit_test_phase_boundary",
-    "Microsoft TSF permits edit-session work during the test phase",
+    "passthrough_enter",
+    "ITfKeyTraceEventSink",
+    "OnKeyTraceDown",
+    "self.commit_traced_boundary(wparam.0 as u32);",
+    "before TSF",
+    "original physical",
+    "Enter (with modifiers such as Shift)",
     "return Ok(BOOL::from(false));",
 ]:
     if required not in service:
         errors.append(
-            f"WindowsTSF Enter must commit during OnTestKeyDown then pass the original physical key: {required}"
+            f"WindowsTSF Enter must commit from the pre-filter key trace then pass the original physical key unchanged: {required}"
         )
 
 if errors:
@@ -151,7 +155,7 @@ if errors:
 print(
     "Windows TSF contract passed: TSF remains the primary current-user path; "
     "InputKey auto-registers/repairs its user-wide profile without elevation and requests activation, "
-    "Enter commits in the TSF test phase before the original physical key reaches the host, "
+    "Enter commits in the pre-filter TSF key-trace phase before the original physical key reaches the host, "
     "whole-document mouse tracking is best-effort, "
     "and compatibility remains available when Windows or the host does not provide those TSF capabilities."
 )
