@@ -1,6 +1,6 @@
 # InputKey active plan
 
-Checkpoint: 2
+Checkpoint: 3
 
 ## Current objective
 
@@ -16,8 +16,9 @@ Maintain this repository's standalone public engineering handoff and preserve In
 
 - [x] Public wiki navigation and cold-start discovery: 15 Markdown files, verified by `python Tests/HandoffTests/check_handoff.py`.
 - [x] Architecture and version checks: `check-architecture.py`, `sync-version.py --check` green on the documentation snapshot.
-- [ ] Review exact staged diff and private-data exposure before an authorized commit/push. Remote publication is not implied.
+- [x] Reviewed only the handoff/CI staged diff and checked for private-data exposure. Public-safe documentation committed locally as `cbf0a9e3a108b95d66d4e85881ac1c6855ac51f7`.
+- [ ] Public remote is not yet verified as updated to this migration revision; a local commit is not remote publication.
 
 ## Next safe action
 
-Inspect and stage only the public handoff/CI changes; verify the public repository revision. Keep source-release, store and installed runtime outcomes separate.
+Keep this public repository independently navigable. Verify the exact public remote and approval before any remote publication; do not infer source-release, store or installed runtime outcomes from documentation work.
