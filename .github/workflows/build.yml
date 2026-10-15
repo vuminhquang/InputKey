@@ -31,6 +31,9 @@ jobs:
       - name: Architecture
         run: python3 Bootstrap/Build/check-architecture.py
 
+      - name: Project handoff
+        run: python3 Tests/HandoffTests/check_handoff.py
+
       - name: Chrome UI contract
         run: python3 Bootstrap/Build/check-chrome-ui.py
 
@@ -79,6 +82,9 @@ jobs:
 
       - name: Architecture
         run: python Bootstrap/Build/check-architecture.py
+
+      - name: Project handoff
+        run: python Tests/HandoffTests/check_handoff.py
 
       - name: Windows hot-path contract
         run: python Bootstrap/Build/check-windows-hook.py
@@ -133,6 +139,9 @@ jobs:
 
       - name: Architecture
         run: python3 Bootstrap/Build/check-architecture.py
+
+      - name: Project handoff
+        run: python3 Tests/HandoffTests/check_handoff.py
 
       - name: Rust format
         run: cargo fmt --all -- --check
