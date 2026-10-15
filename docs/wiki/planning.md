@@ -1,6 +1,6 @@
 # InputKey active plan
 
-Checkpoint: 3
+Checkpoint: 4
 
 ## Current objective
 
@@ -17,8 +17,8 @@ Maintain this repository's standalone public engineering handoff and preserve In
 - [x] Public wiki navigation and cold-start discovery: 15 Markdown files, verified by `python Tests/HandoffTests/check_handoff.py`.
 - [x] Architecture and version checks: `check-architecture.py`, `sync-version.py --check` green on the documentation snapshot.
 - [x] Reviewed only the handoff/CI staged diff and checked for private-data exposure. Public-safe documentation committed locally as `cbf0a9e3a108b95d66d4e85881ac1c6855ac51f7`.
-- [ ] Public remote is not yet verified as updated to this migration revision; a local commit is not remote publication.
+- [x] The public-safe handoff migration is approved for ordinary fast-forward publication to the existing `origin/main` as of 2026-10-16. The verified remote state is determined by live `git ls-remote origin refs/heads/main` compared against `git rev-parse HEAD`; this document does not assert an unobserved push outcome. No product release tag, store submission or device deployment is included.
 
 ## Next safe action
 
-Keep this public repository independently navigable. Verify the exact public remote and approval before any remote publication; do not infer source-release, store or installed runtime outcomes from documentation work.
+Reconcile the actual local worktree and public remote revision. If `origin/main` already equals HEAD, the Git publication checkpoint is complete; otherwise perform only the authorized fast-forward push after validating the source and disclosure. Report any rejected or uncertain remote outcome rather than force-pushing. Keep product release, store and installed runtime outcomes separate.
