@@ -88,21 +88,31 @@ function type(input, text) {
 
 test('Shift+Space commits only the physical keys', () => {
   const input = new Input();
-  type(input, 'refer');
-  assert.equal(input.value, 'r\u1ec3');
+  type(input, 'as');
+  assert.equal(input.value, '\u00e1');
 
   const event = send(input, ' ', { shiftKey: true, code: 'Space' });
   assert.equal(event.prevented, true);
   assert.equal(event.stopped, true);
-  assert.equal(input.value, 'refer');
+  assert.equal(input.value, 'as');
 });
 
 test('normal Space keeps word-finalization behavior', () => {
   const input = new Input();
-  type(input, 'data');
-  assert.equal(input.value, 'd\u00e2t');
+  type(input, 'as');
+  assert.equal(input.value, '\u00e1');
   send(input, ' ');
-  assert.equal(input.value, 'data ');
+  assert.equal(input.value, '\u00e1 ');
+});
+
+test('installed browser engine preserves complete English words at live and boundary', () => {
+  for (const word of ['queue', 'refer', 'data']) {
+    const input = new Input();
+    type(input, word);
+    assert.equal(input.value, word, `live ${word}`);
+    send(input, ' ');
+    assert.equal(input.value, `${word} `, `boundary ${word}`);
+  }
 });
 
 test('Space decides whether an unfinished Vietnamese shape survives', () => {

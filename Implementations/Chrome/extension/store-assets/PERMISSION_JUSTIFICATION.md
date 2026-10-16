@@ -1,17 +1,19 @@
 # Permission and site-access justification
 
 ## Single purpose
-Provide Vietnamese Telex/VNI typing in editable fields on websites.
+Provide local multilingual text input in editable website fields, with supported Vietnamese Telex/VNI and French, Danish, Swedish and German Telex mappings.
 
 ## `storage`
-Used only to save local extension preferences: enabled state, input method (Telex/VNI), Simple Telex, auto-restore, and toast preference. The extension uses `chrome.storage.local`, not a developer server.
+Used only for local extension preferences: enabled state, language/method, language-specific options, auto restore, smart correction, toggle shortcut and toast preference. The extension uses `chrome.storage.local`, not a developer server.
 
 ## Site access: `http://*/*` and `https://*/*`
-The extension must run a content script on normal websites so it can receive keyboard events in editable fields and replace the current word with the corresponding Vietnamese Unicode text. This access is necessary for the extension's core user-facing feature.
+The content script must receive keyboard input in the user's editable fields on ordinary websites and replace only the active composition with the selected language's locally generated Unicode text. This is its core user-facing function, regardless of website domain.
 
-The content script ignores password fields. It does not collect page contents, browsing history, or typed text; it does not send data off-device; and it does not inject ads or tracking.
+Password fields are ignored. It does not collect or transmit page contents, browsing history or typed text. It does not inject advertising or tracking.
 
 ## Remote code
-None. All executable JavaScript required by the extension is packaged inside the submitted ZIP.
+None. The Rust engine is compiled into the packaged local `inputkey.wasm` and all executable JavaScript ships inside the extension ZIP.
 
-Developer/support contact: vu.minh.quang@outlook.com
+Website: https://vuminhquang.github.io/InputKey/
+Privacy: https://vuminhquang.github.io/InputKey/privacy.html
+Developer contact: vu.minh.quang@outlook.com

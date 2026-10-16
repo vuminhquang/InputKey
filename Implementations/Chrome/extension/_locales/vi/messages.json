@@ -1,9 +1,9 @@
 {
   "extName": {
-    "message": "InputKey — Bộ gõ tiếng Việt"
+    "message": "InputKey — Bộ gõ đa ngôn ngữ"
   },
   "extDescription": {
-    "message": "Bộ gõ tiếng Việt mã nguồn mở, miễn phí cho Telex và VNI. Xử lý cục bộ ngay trong trình duyệt."
+    "message": "Gõ theo tốc độ suy nghĩ. Hỗ trợ tiếng Việt, Pháp, Đan Mạch, Thụy Điển và Đức. Xử lý cục bộ."
   },
   "actionTitle": {
     "message": "InputKey"

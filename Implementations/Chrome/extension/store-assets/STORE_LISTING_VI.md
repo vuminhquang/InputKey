@@ -1,37 +1,41 @@
 # Chrome Web Store listing — Tiếng Việt
 
 ## Tên
-InputKey — Bộ gõ tiếng Việt
+InputKey — Bộ gõ đa ngôn ngữ
 
 ## Tóm tắt
-Bộ gõ tiếng Việt mã nguồn mở cho Telex và VNI. Xử lý cục bộ ngay trên thiết bị.
+Gõ theo tốc độ suy nghĩ. Hỗ trợ tiếng Việt, Pháp, Đan Mạch, Thụy Điển và Đức. Xử lý cục bộ.
 
 ## Danh mục đề xuất
 Tools / Công cụ
 
 ## Mô tả chi tiết
-InputKey giúp bạn gõ tiếng Việt trực tiếp trong các ô nhập liệu trên website bằng Telex hoặc VNI.
+Gõ theo tốc độ suy nghĩ.
 
-Tính năng chính:
-- Gõ Telex và VNI với Unicode.
-- Hoạt động với input, textarea và contenteditable thông dụng.
-- Bật/tắt chế độ tiếng Việt từ popup, Ctrl + Shift hoặc Alt + Z.
-- Hỗ trợ Simple Telex, Backspace dựng lại từ đang gõ, Esc trả phím gốc và Auto Restore deterministic.
-- Hoàn tác dấu của cả từ: mặc định Ctrl+Space biến token hiện tại về đúng chuỗi phím vật lý, ví dụ \`refer → rể → Ctrl+Space → refer\`.
-- Phím tắt hoàn tác cả từ có thể đổi, tắt hoặc đặt lại.
-- Không quảng cáo, không analytics, không remote code.
-- Nội dung đang gõ chỉ được xử lý trong bộ nhớ trình duyệt, không được lưu hoặc gửi tới máy chủ của nhà phát triển.
-- Mã nguồn công khai: https://github.com/vuminhquang/InputKey
+InputKey là bộ gõ đa ngôn ngữ miễn phí, mã nguồn mở, xử lý ngay trên thiết bị. Gõ tự nhiên trong các ô nhập liệu của website mà không phải dừng lại để tìm ký tự có dấu hoặc đổi bố cục bàn phím.
 
-Quyền truy cập website chỉ được dùng để phát hiện phím gõ trong ô nhập liệu và chuyển chuỗi Telex/VNI thành tiếng Việt. Extension bỏ qua ô mật khẩu.
+Các ngôn ngữ đang hỗ trợ:
+- Tiếng Việt — Telex và VNI, dấu Unicode, sửa từ thông minh và giữ nguyên từ tiếng Anh.
+- Tiếng Pháp — French Telex cho chữ có dấu và chữ ghép.
+- Tiếng Đan Mạch — Danish Telex: æ, ø, å.
+- Tiếng Thụy Điển — Swedish Telex: ä, ö, å.
+- Tiếng Đức — German Telex: ä, ö, ü, ß.
 
-Đây là bộ gõ bên trong Chrome/Edge, không phải IME toàn hệ thống. Một số trang được trình duyệt bảo vệ và một số editor đặc biệt có thể không được hỗ trợ.
+Chọn ngôn ngữ và phương pháp gõ tương ứng ngay trong popup. Hỗ trợ các ô input, textarea và contenteditable phổ biến; có thể chỉnh phím tắt bật/tắt và tuỳ chọn riêng theo ngôn ngữ. Shift+Space hoàn nguyên từ hiện tại về các phím vật lý đã gõ và không chèn dấu cách.
 
-## Nhà phát triển / liên hệ hỗ trợ
+Engine Rust dùng chung được đóng gói thành WebAssembly chạy cục bộ. Nội dung đang gõ chỉ được xử lý trong bộ nhớ trình duyệt, không được lưu hoặc gửi tới nhà phát triển; chỉ cài đặt của extension được lưu cục bộ. Không quảng cáo, analytics, remote code hay dịch vụ gõ từ xa. Bỏ qua ô mật khẩu.
+
+Quyền chạy trên website HTTP/HTTPS chỉ nhằm xử lý phím gõ trong ô nhập liệu. Extension không chạy trên trang được trình duyệt bảo vệ; một số editor đặc biệt có thể chưa được hỗ trợ. Đây là extension trong trình duyệt, không phải IME toàn hệ thống.
+
+Website chính thức: https://vuminhquang.github.io/InputKey/
+Mã nguồn: https://github.com/vuminhquang/InputKey
+Chính sách riêng tư: https://vuminhquang.github.io/InputKey/privacy.html
+
+## Website / trang chủ
+https://vuminhquang.github.io/InputKey/
+
+## Hỗ trợ
+https://github.com/vuminhquang/InputKey/issues
+
+## Liên hệ nhà phát triển
 vu.minh.quang@outlook.com
-
-### Hủy dấu bằng phím lặp
-Nhấn lặp phím dấu để hủy luôn khả dụng: \`docss → docs\`, \`tesst → test\`. Các từ tiếng Anh như “password”, “coffee” vẫn được giữ nguyên.
-
-### Rust core dùng chung
-Extension Chrome/Edge dùng cùng engine Rust deterministic với các bản native của InputKey, được biên dịch thành WebAssembly cục bộ \`inputkey.wasm\`. Toàn bộ xử lý gõ vẫn diễn ra trên thiết bị.

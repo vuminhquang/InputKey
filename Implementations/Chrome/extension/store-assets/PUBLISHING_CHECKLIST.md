@@ -1,19 +1,20 @@
-# Publishing checklist
+# Publishing checklist — Chrome Web Store InputKey 5.2.13
 
-- [ ] Create/verify the Chrome Web Store developer account and 2-Step Verification.
-- [ ] Upload `inputkey-for-chrome-1.2.0-store.zip`.
-- [ ] Paste the title, summary, and detailed description from `STORE_LISTING_VI.md` and/or `STORE_LISTING_EN.md`.
-- [ ] Upload `icon128.png` (also included in the extension ZIP).
-- [ ] Upload at least one 1280×800 screenshot from this folder.
-- [ ] Upload `promo-small-440x280.png`; optionally upload `promo-marquee-1400x560.png`.
-- [ ] Host `privacy-policy.html` at a public HTTPS URL.
-- [x] Developer/support contact set to `vu.minh.quang@outlook.com` in the privacy policy and listing docs.
-- [ ] Paste the hosted privacy-policy URL into the dashboard Privacy field.
-- [ ] Use `PERMISSION_JUSTIFICATION.md` when answering permission/site-access questions.
-- [ ] Use `REVIEW_NOTES.md` as reviewer testing notes where the dashboard provides a field.
-- [ ] Set the single purpose to: “Provide Vietnamese Telex/VNI typing in editable fields on websites.”
-- [ ] Confirm data-use answers match the privacy policy: no collection/transmission of typed content; only local preferences are stored.
-- [x] Developer contact set to `vu.minh.quang@outlook.com`. Add a support URL/homepage later if desired.
-- [ ] Test the exact uploaded ZIP on a clean Chrome profile before submitting.
+Existing item ID: `bogegcgnbkkpdnambaajjeceoiijdkjb`
+Publisher: RentAICoder; use only the publisher Google account `vmquangvu@gmail.com`.
+Update the existing published item, not a new listing.
 
-- [x] v1.3.0 double-cancel option documented; no new permissions or data handling.
+- [x] Version 5.2.13 built using `Bootstrap/Build/build-chrome.ps1`; browser DOM tests pass 16/16, including English collision protection.
+- [x] Extension metadata and both listing languages describe the five supported language packs and the “Type at the speed of thought” positioning.
+- [x] Official website: https://vuminhquang.github.io/InputKey/
+- [ ] Confirm new privacy page is live: https://vuminhquang.github.io/InputKey/privacy.html
+- [ ] Upload exact vetted ZIP `dist/chrome/InputKey-5.2.13.zip` as a Package update to the existing item ID.
+- [ ] Update the English/Vietnamese descriptions from `STORE_LISTING_EN.md` and `STORE_LISTING_VI.md`, not stale copy.
+- [ ] Set Homepage URL to https://vuminhquang.github.io/InputKey/; Support URL to https://github.com/vuminhquang/InputKey/issues.
+- [ ] Update Privacy policy URL; site access/permission justification and single purpose must cover all five supported languages.
+- [ ] Update Test instructions from `REVIEW_NOTES.md`: English preservation, Vietnamese Telex/VNI and French/Danish/Swedish/German Telex.
+- [ ] Confirm the existing icon and screenshots remain valid and descriptive; do not claim new features absent from the package.
+- [ ] Save draft, inspect all tabs and submit for review; capture actual dashboard status. “Submitted” is not “Published.”
+- [ ] Verify published version later on the public Store page; do not report success based only on local ZIP or source push.
+
+Privacy: No typed-content collection/transmission; local settings in `chrome.storage.local`; packaged local WASM; no analytics/ads.

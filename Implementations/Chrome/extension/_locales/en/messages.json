@@ -1,9 +1,9 @@
 {
   "extName": {
-    "message": "InputKey — Vietnamese Keyboard"
+    "message": "InputKey — Multilingual Keyboard"
   },
   "extDescription": {
-    "message": "Free & open-source Vietnamese keyboard for Telex and VNI. Local-first: typed text stays in your browser."
+    "message": "Type at the speed of thought. Local-first typing for Vietnamese, French, Danish, Swedish and German."
   },
   "actionTitle": {
     "message": "InputKey"
