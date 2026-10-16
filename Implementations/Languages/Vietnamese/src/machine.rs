@@ -1467,8 +1467,27 @@ impl Machine {
         self.rendered.clone()
     }
 
+    fn prefers_known_english_raw(&self) -> bool {
+        self.transformed
+            && self.options.auto_restore
+            && self
+                .lexicon
+                .as_ref()
+                .is_some_and(|lexicon| lexicon.has_word(&self.raw))
+            && !self
+                .raw
+                .eq_ignore_ascii_case(&telex_encoding(&self.rendered))
+    }
+
     fn render_candidate(&mut self) -> String {
         self.rendered = apply_tone(&self.chars, self.tone).into_iter().collect();
+        if self.prefers_known_english_raw() {
+            self.mode = Mode::RawLocked;
+            self.phase = Phase::Dead;
+            self.rendered = self.fallback.clone();
+            self.correction_blocked = true;
+            return self.rendered.clone();
+        }
         let analysis = analyze_transducer(&self.rendered);
         self.phase = analysis.phase;
 
@@ -1966,6 +1985,15 @@ impl Machine {
 
         if self.options.smart_correction && self.options.method.eq_ignore_ascii_case("telex") {
             if let Some(corrected) = resolve_telex_intent(&self.raw) {
+                if self.options.auto_restore
+                    && self
+                        .lexicon
+                        .as_ref()
+                        .is_some_and(|words| words.has_word(&self.raw))
+                    && !self.raw.eq_ignore_ascii_case(&telex_encoding(&corrected))
+                {
+                    return self.apply_finalize();
+                }
                 let corrected = apply_case_pattern(&self.rendered, &corrected);
                 if corrected != self.rendered {
                     return self.adopt_smart_candidate(corrected);

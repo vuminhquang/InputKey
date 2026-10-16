@@ -116,6 +116,7 @@ impl LexiconPort for Words {
             "deterministic",
             "password",
             "coffee",
+            "queue",
             "test",
             "ask",
             "after",
@@ -232,11 +233,38 @@ fn regression_matrix() {
         ("deterministic", "deterministic", telex.clone()),
         ("password", "password", telex.clone()),
         ("coffee", "coffee", telex.clone()),
+        ("queue", "queue", telex.clone()),
         ("tesst", "test", telex),
     ];
     for (input, expected, opts) in cases {
         assert_eq!(run(input, opts), expected, "{input}");
     }
+}
+
+#[test]
+fn known_english_word_does_not_turn_into_speculative_vietnamese() {
+    let mut machine = root(options("telex", false, true));
+    for key in "queue".chars() {
+        machine.character(key);
+    }
+    assert_eq!(machine.displayed(), "queue");
+    assert_eq!(machine.space_boundary(), "queue ");
+    let mut punctuation = root(options("telex", false, true));
+    for key in "queue".chars() {
+        punctuation.character(key);
+    }
+    assert_eq!(punctuation.punctuation_boundary('.'), "queue.");
+    let catalog = inputkey_runtime::Catalog::bundled();
+    let mut shipped = inputkey_runtime::create_machine(
+        &catalog,
+        "vi",
+        inputkey_runtime::default_config(&catalog, "vi"),
+    )
+    .unwrap();
+    for key in "queue".chars() {
+        shipped.dispatch(RootInput::Character(key));
+    }
+    assert_eq!(shipped.dispatch(RootInput::SpaceBoundary), "queue ");
 }
 
 #[test]

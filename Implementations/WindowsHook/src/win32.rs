@@ -30,6 +30,7 @@ struct Shared {
     active_target: AtomicUsize,
     capability_target: AtomicUsize,
     capability_state: AtomicU8,
+    capability_epoch: AtomicU64,
     epoch: AtomicU64,
     modifiers: AtomicU8,
     engine_config: Mutex<EngineConfig>,
@@ -53,20 +54,25 @@ fn state() -> Option<&'static Shared> {
 }
 
 fn cached_capability(shared: &Shared, target: HWND) -> u8 {
-    if shared.capability_target.load(Ordering::Acquire) == target as usize {
+    if shared.capability_epoch.load(Ordering::Acquire) == shared.epoch.load(Ordering::Acquire)
+        && shared.capability_target.load(Ordering::Acquire) == target as usize
+    {
         shared.capability_state.load(Ordering::Acquire)
     } else {
         CAPABILITY_UNKNOWN
     }
 }
 
-fn set_capability(shared: &Shared, target: HWND, capability: u8) {
+fn set_capability(shared: &Shared, target: HWND, capability: u8, event_epoch: u64) {
     shared
         .capability_state
         .store(CAPABILITY_UNKNOWN, Ordering::Release);
     shared
         .capability_target
         .store(target as usize, Ordering::Release);
+    shared
+        .capability_epoch
+        .store(event_epoch, Ordering::Release);
     shared.capability_state.store(capability, Ordering::Release);
 }
 
@@ -514,12 +520,17 @@ fn worker(shared: Arc<Shared>, factory: EngineFactory) {
                     if owned.is_none() {
                         match crate::transport::capture(target, automation.as_ref()) {
                             crate::transport::Capture::Ready(transport) => {
-                                set_capability(&shared, target, CAPABILITY_SUPPORTED);
+                                set_capability(&shared, target, CAPABILITY_SUPPORTED, event.epoch);
                                 owned = Some(transport);
                             }
                             crate::transport::Capture::Unsupported
                             | crate::transport::Capture::Denied => {
-                                set_capability(&shared, target, CAPABILITY_UNSUPPORTED);
+                                set_capability(
+                                    &shared,
+                                    target,
+                                    CAPABILITY_UNSUPPORTED,
+                                    event.epoch,
+                                );
                                 let _ = crate::synthetic::replay_physical(
                                     event.vk,
                                     event.scan_code,
@@ -655,10 +666,9 @@ pub struct CompatibilityHandle {
 
 impl CompatibilityHandle {
     pub fn set_capture_enabled(&self, enabled: bool) {
-        self.shared
-            .capture_enabled
-            .store(enabled, Ordering::Release);
-        if !enabled {
+        let previous = self.shared.capture_enabled.swap(enabled, Ordering::AcqRel);
+        if previous != enabled {
+            invalidate_capability(&self.shared);
             self.shared.epoch.fetch_add(1, Ordering::AcqRel);
             self.shared.active.store(false, Ordering::Release);
             self.shared.active_target.store(0, Ordering::Release);
@@ -677,6 +687,7 @@ impl CompatibilityHandle {
             *config = apply_settings(config.clone(), &settings);
         }
         self.shared.epoch.fetch_add(1, Ordering::AcqRel);
+        invalidate_capability(&self.shared);
         self.shared.active.store(false, Ordering::Release);
         self.shared.active_target.store(0, Ordering::Release);
         unsafe {
@@ -742,6 +753,7 @@ pub fn start(config: Config, factory: EngineFactory) -> Result<CompatibilityHand
         active_target: AtomicUsize::new(0),
         capability_target: AtomicUsize::new(0),
         capability_state: AtomicU8::new(CAPABILITY_UNKNOWN),
+        capability_epoch: AtomicU64::new(0),
         epoch: AtomicU64::new(0),
         modifiers: AtomicU8::new(0),
         engine_config: Mutex::new(initial_engine_config),

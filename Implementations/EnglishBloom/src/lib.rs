@@ -57,6 +57,7 @@ mod tests {
         let lexicon = EnglishBloom::new();
         assert!(lexicon.has_word("password"));
         assert!(lexicon.has_word("software"));
+        assert!(lexicon.has_word("queue"));
         assert!(!lexicon.has_word("rể"));
         assert!(!lexicon.has_word("a"));
     }

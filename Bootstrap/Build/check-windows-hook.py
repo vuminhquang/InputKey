@@ -11,6 +11,19 @@ clipboard_source = root / "Implementations/WindowsClipboard/src/lib.rs"
 transition_source = root / "Implementations/WindowsHook/src/transition.rs"
 
 hook = hook_source.read_text(encoding="utf-8")
+
+# A terminal can keep the same focused HWND across off/on transitions. A
+# cached negative capability from the previous engine epoch must not block
+# the first key after re-enabling the compatibility input path.
+refresh = hook.split("pub fn reload_settings(&self) {", 1)
+if len(refresh) != 2 or "invalidate_capability(&self.shared);" not in refresh[1].split("impl Drop for CompatibilityHandle", 1)[0]:
+    raise SystemExit("Windows compatibility check failed: settings reload retains stale target capability")
+for marker in ("capability_epoch.load(Ordering::Acquire) == shared.epoch.load(Ordering::Acquire)", "set_capability(&shared, target, CAPABILITY_SUPPORTED, event.epoch)", "set_capability(&shared, target, CAPABILITY_UNSUPPORTED, event.epoch)"):
+    if "".join(marker.split()) not in "".join(hook.split()).replace(",)", ")"):
+        raise SystemExit("Windows compatibility check failed: stale worker capability may survive a settings toggle: " + marker)
+reenable = hook.split("pub fn set_capture_enabled(&self, enabled: bool) {", 1)
+if len(reenable) != 2 or "invalidate_capability(&self.shared);" not in reenable[1].split("pub fn reload_settings", 1)[0]:
+    raise SystemExit("Windows compatibility check failed: capture re-enable retains stale target capability")
 resolver = resolver_source.read_text(encoding="utf-8")
 native = native_source.read_text(encoding="utf-8")
 uia = uia_source.read_text(encoding="utf-8")
