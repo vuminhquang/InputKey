@@ -9,8 +9,40 @@ uia_source = root / "Implementations/WindowsHook/src/uia.rs"
 synthetic_source = root / "Implementations/WindowsHook/src/synthetic.rs"
 clipboard_source = root / "Implementations/WindowsClipboard/src/lib.rs"
 transition_source = root / "Implementations/WindowsHook/src/transition.rs"
+control_source = root / "Implementations/WindowsControl/src/win32.rs"
+shortcut_source = root / "Implementations/WindowsControl/src/toggle_shortcut.rs"
 
 hook = hook_source.read_text(encoding="utf-8")
+control = control_source.read_text(encoding="utf-8")
+shortcut = shortcut_source.read_text(encoding="utf-8")
+
+# Long-lived CMD/console HWNDs and LL hooks require event-driven re-acquisition
+# after user unlock/reconnect or sleep resume, not a sleep/polling workaround.
+for marker in (
+    "WTSRegisterSessionNotification(hwnd, NOTIFY_FOR_THIS_SESSION)",
+    "WTSUnRegisterSessionNotification(hwnd)",
+    "WTS_SESSION_UNLOCK",
+    "WTS_CONSOLE_CONNECT",
+    "WTS_REMOTE_CONNECT",
+    "rearm_input_on_transition(message.message, message.wParam as u32)",
+    "notify_settings_changed();",
+    "toggle_shortcut_hook = crate::toggle_shortcut::install(hwnd);",
+):
+    if marker not in control:
+        raise SystemExit("Windows session recovery is missing: " + marker)
+for marker in (
+    "REARM_HOOK_MESSAGE",
+    "PostThreadMessageW(hook_thread, REARM_HOOK_MESSAGE, 0, 0)",
+    "SetWindowsHookExW(WH_KEYBOARD_LL, Some(keyboard_proc), module, 0)",
+    "SetWindowsHookExW(WH_MOUSE_LL, Some(mouse_proc), module, 0)",
+    "UnhookWindowsHookEx(keyboard_hook)",
+    "invalidate_capability(&self.shared)",
+    "self.shared.modifiers.store(0, Ordering::Release)",
+):
+    if marker not in hook:
+        raise SystemExit("Windows LL hook rearm/ownership is missing: " + marker)
+if "slot.store(0, Ordering::Release)" not in shortcut:
+    raise SystemExit("Windows shortcut reinstall must clear stale suppressed key-up state")
 
 # A terminal can keep the same focused HWND across off/on transitions. A
 # cached negative capability from the previous engine epoch must not block

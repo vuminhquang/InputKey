@@ -20,6 +20,9 @@ const INPUT_MOD_WIN: u8 = 8;
 const CAPABILITY_UNKNOWN: u8 = 0;
 const CAPABILITY_SUPPORTED: u8 = 1;
 const CAPABILITY_UNSUPPORTED: u8 = 2;
+// Posted by the helper after settings reload or a real session-resume event.
+// No polling timeout: Windows can silently remove an LL hook, so reacquire it.
+const REARM_HOOK_MESSAGE: u32 = WM_APP + 33;
 
 struct Shared {
     queue: SpscRing<Event, 256>,
@@ -690,8 +693,21 @@ impl CompatibilityHandle {
         invalidate_capability(&self.shared);
         self.shared.active.store(false, Ordering::Release);
         self.shared.active_target.store(0, Ordering::Release);
+        // The old HWND may survive a lock/unlock even if its UIA capability or
+        // our low-level keyboard hook did not. Reset both ownership and physical
+        // key tracking, then re-arm the hooks on their installing thread.
+        self.shared.modifiers.store(0, Ordering::Release);
+        for slot in &self.shared.suppress_up {
+            slot.store(0, Ordering::Release);
+        }
         unsafe {
             SetEvent(self.shared.work as HANDLE);
+        }
+        let hook_thread = self.shared.hook_thread_id.load(Ordering::Acquire);
+        if hook_thread != 0 {
+            unsafe {
+                PostThreadMessageW(hook_thread, REARM_HOOK_MESSAGE, 0, 0);
+            }
         }
     }
 }
@@ -783,7 +799,7 @@ pub fn start(config: Config, factory: EngineFactory) -> Result<CompatibilityHand
             PeekMessageW(&mut bootstrap, std::ptr::null_mut(), 0, 0, PM_NOREMOVE);
         }
         let module = unsafe { GetModuleHandleW(std::ptr::null()) };
-        let keyboard_hook =
+        let mut keyboard_hook =
             unsafe { SetWindowsHookExW(WH_KEYBOARD_LL, Some(keyboard_proc), module, 0) };
         if keyboard_hook.is_null() {
             unsafe {
@@ -791,7 +807,7 @@ pub fn start(config: Config, factory: EngineFactory) -> Result<CompatibilityHand
             }
             return;
         }
-        let mouse_hook = unsafe { SetWindowsHookExW(WH_MOUSE_LL, Some(mouse_proc), module, 0) };
+        let mut mouse_hook = unsafe { SetWindowsHookExW(WH_MOUSE_LL, Some(mouse_proc), module, 0) };
         if mouse_hook.is_null() {
             unsafe {
                 UnhookWindowsHookEx(keyboard_hook);
@@ -806,6 +822,31 @@ pub fn start(config: Config, factory: EngineFactory) -> Result<CompatibilityHand
 
         let mut message: MSG = unsafe { std::mem::zeroed() };
         while unsafe { GetMessageW(&mut message, std::ptr::null_mut(), 0, 0) } > 0 {
+            if message.hwnd.is_null() && message.message == REARM_HOOK_MESSAGE {
+                // Install the replacement pair before releasing the previous
+                // pair; failure leaves the previous pair intact. This runs on
+                // the original hook thread, with no queued keyboard callback
+                // dispatched between installation and replacement.
+                let fresh_keyboard =
+                    unsafe { SetWindowsHookExW(WH_KEYBOARD_LL, Some(keyboard_proc), module, 0) };
+                if !fresh_keyboard.is_null() {
+                    let fresh_mouse =
+                        unsafe { SetWindowsHookExW(WH_MOUSE_LL, Some(mouse_proc), module, 0) };
+                    if fresh_mouse.is_null() {
+                        unsafe {
+                            UnhookWindowsHookEx(fresh_keyboard);
+                        }
+                    } else {
+                        unsafe {
+                            UnhookWindowsHookEx(mouse_hook);
+                            UnhookWindowsHookEx(keyboard_hook);
+                        }
+                        keyboard_hook = fresh_keyboard;
+                        mouse_hook = fresh_mouse;
+                    }
+                }
+                continue;
+            }
             unsafe {
                 TranslateMessage(&message);
                 DispatchMessageW(&message);

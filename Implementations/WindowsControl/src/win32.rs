@@ -4,12 +4,24 @@ use inputkey_windows_settings as settings;
 use std::sync::OnceLock;
 use windows_sys::Win32::Foundation::*;
 use windows_sys::Win32::System::LibraryLoader::GetModuleHandleW;
+use windows_sys::Win32::System::RemoteDesktop::{
+    WTSRegisterSessionNotification, WTSUnRegisterSessionNotification, NOTIFY_FOR_THIS_SESSION,
+};
 use windows_sys::Win32::UI::Shell::*;
 use windows_sys::Win32::UI::WindowsAndMessaging::*;
 
 const CLASS_NAME: &str = "InputKeyControlWindow";
 const TSF_CONTROL_CLASS: &str = "InputKeyTSFControlWindow";
 const TRAY_MESSAGE: u32 = WM_APP + 11;
+
+fn rearm_input_on_transition(message: u32, reason: u32) -> bool {
+    (message == WM_WTSSESSION_CHANGE
+        && matches!(
+            reason,
+            WTS_SESSION_UNLOCK | WTS_CONSOLE_CONNECT | WTS_REMOTE_CONNECT
+        ))
+        || (message == WM_POWERBROADCAST && matches!(reason, 0x07 | 0x12))
+}
 const ID_TOGGLE: usize = 101;
 const ID_SETTINGS: usize = 102;
 const ID_SIMPLE_TELEX: usize = 103;
@@ -568,16 +580,38 @@ pub fn run(actions: ControlActions) {
         Shell_NotifyIconW(NIM_ADD, &tray);
         update_tray(hwnd);
     }
-    let _toggle_shortcut_hook = crate::toggle_shortcut::install(hwnd);
+    let mut toggle_shortcut_hook = crate::toggle_shortcut::install(hwnd);
+    let session_registered =
+        unsafe { WTSRegisterSessionNotification(hwnd, NOTIFY_FOR_THIS_SESSION) } != 0;
 
     let mut message: MSG = unsafe { std::mem::zeroed() };
     while unsafe { GetMessageW(&mut message, std::ptr::null_mut(), 0, 0) } > 0 {
+        // Recover from real desktop transitions, not a timer. The compatibility
+        // process can survive a lock/sleep while Windows silently removes its
+        // low-level hook or a console HWND keeps a stale negative capability.
+        if message.hwnd == hwnd && rearm_input_on_transition(message.message, message.wParam as u32)
+        {
+            // This delivers the existing reload event to the helper, whose
+            // installing thread reacquires the hook pair and resets its FSM.
+            notify_settings_changed();
+            // The tray shortcut has a separate LL hook and needs the same
+            // lifecycle recovery; simply refreshing its configuration is not
+            // sufficient if Windows removed the hook.
+            drop(toggle_shortcut_hook.take());
+            toggle_shortcut_hook = crate::toggle_shortcut::install(hwnd);
+        }
         unsafe {
             TranslateMessage(&message);
             DispatchMessageW(&message);
         }
     }
 
+    if session_registered {
+        unsafe {
+            WTSUnRegisterSessionNotification(hwnd);
+        }
+    }
+    drop(toggle_shortcut_hook);
     unsafe {
         Shell_NotifyIconW(NIM_DELETE, &tray);
         if !ICON_V.is_null() {
@@ -588,5 +622,29 @@ pub fn run(actions: ControlActions) {
             DestroyIcon(ICON_E);
             ICON_E = std::ptr::null_mut();
         }
+    }
+}
+
+#[cfg(test)]
+mod session_recovery_tests {
+    use super::*;
+
+    #[test]
+    fn unlock_and_reconnect_rearm_input_but_lock_does_not() {
+        for reason in [WTS_SESSION_UNLOCK, WTS_CONSOLE_CONNECT, WTS_REMOTE_CONNECT] {
+            assert!(rearm_input_on_transition(WM_WTSSESSION_CHANGE, reason));
+        }
+        assert!(!rearm_input_on_transition(
+            WM_WTSSESSION_CHANGE,
+            WTS_SESSION_LOCK
+        ));
+    }
+
+    #[test]
+    fn power_resume_rearms_input_but_unrelated_messages_do_not() {
+        assert!(rearm_input_on_transition(WM_POWERBROADCAST, 0x07));
+        assert!(rearm_input_on_transition(WM_POWERBROADCAST, 0x12));
+        assert!(!rearm_input_on_transition(WM_POWERBROADCAST, 0x04));
+        assert!(!rearm_input_on_transition(WM_APP + 50, WTS_SESSION_UNLOCK));
     }
 }

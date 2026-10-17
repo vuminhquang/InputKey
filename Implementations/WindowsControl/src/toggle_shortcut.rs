@@ -343,6 +343,11 @@ impl Drop for Hook {
 }
 
 pub fn install(owner: HWND) -> Option<Hook> {
+    for slot in [&SUPPRESS_0, &SUPPRESS_1, &SUPPRESS_2, &SUPPRESS_3] {
+        slot.store(0, Ordering::Release);
+    }
+    MODIFIERS.store(0, Ordering::Release);
+    PHYSICAL_MODIFIERS.store(0, Ordering::Release);
     OWNER.store(owner as isize, Ordering::Release);
     refresh();
     let module = unsafe { GetModuleHandleW(std::ptr::null()) };
