@@ -59,7 +59,8 @@ def type_text(handle: int, text: str) -> str:
 
 h = lib.inputkey_create(b"telex", 0, 1)
 try:
-    assert type_text(h, "refer") == "rể"
+    # Known English words stay literal; raw boundary must retain physical keys.
+    assert type_text(h, "refer") == "refer"
     assert call0(lib.inputkey_raw_boundary, h) == "refer"
     assert type_text(h, "s") == "s"
 finally:
