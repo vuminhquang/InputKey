@@ -117,6 +117,13 @@ impl LexiconPort for Words {
             "password",
             "coffee",
             "queue",
+            "bar",
+            "barn",
+            "dud",
+            "dudowcj",
+            "bark",
+            "farm",
+            "carn",
             "test",
             "ask",
             "after",
@@ -242,6 +249,100 @@ fn regression_matrix() {
 }
 
 #[test]
+fn delayed_telex_modifiers_preserve_physical_base_order() {
+    let mut english_prefix = root(options("telex", false, true));
+    for key in "dud".chars() {
+        english_prefix.character(key);
+    }
+    // Both readings exist: the complete Telex interpretation wins, even
+    // without a tone; Shift+Space remains the explicit English/literal path.
+    assert_eq!(english_prefix.displayed(), "đu");
+    assert_eq!(english_prefix.space_boundary(), "đu ");
+
+    let mut machine = root(options("telex", false, true));
+    for key in "dudowcj".chars() {
+        machine.character(key);
+    }
+    assert_eq!(machine.displayed(), "được");
+    assert_eq!(machine.space_boundary(), "được ");
+    assert_eq!(run("dudowcj", options("telex", false, true)), "được");
+    assert_eq!(run("quees", options("telex", false, true)), "quế");
+    assert_ne!(run("dcudowj", options("telex", false, true)), "được");
+
+    let mut literal = root(options("telex", false, true));
+    for key in "dudowcj".chars() {
+        literal.character(key);
+    }
+    assert_eq!(literal.raw_boundary(), "dudowcj");
+
+    let catalog = inputkey_runtime::Catalog::bundled();
+    let mut shipped = inputkey_runtime::create_machine(
+        &catalog,
+        "vi",
+        inputkey_runtime::default_config(&catalog, "vi"),
+    )
+    .unwrap();
+    for key in "dudowcj".chars() {
+        shipped.dispatch(RootInput::Character(key));
+    }
+    assert_eq!(shipped.dispatch(RootInput::SpaceBoundary), "được ");
+}
+
+#[test]
+fn english_homographs_must_not_override_complete_telex_intent() {
+    for (physical, intended) in [
+        ("bar", "bả"),
+        ("barn", "bản"),
+        ("banr", "bản"),
+        ("carn", "cản"),
+    ] {
+        let mut machine = root(options("telex", false, true));
+        let mut live = String::new();
+        for key in physical.chars() {
+            live = machine.character(key);
+        }
+        assert_eq!(live, intended, "live input: {physical}");
+        assert_eq!(machine.displayed(), intended, "displayed: {physical}");
+        assert_eq!(
+            machine.space_boundary(),
+            format!("{intended} "),
+            "space: {physical}"
+        );
+        assert!(!machine.active(), "committed: {physical}");
+    }
+
+    for physical in ["bark", "farm", "queue"] {
+        assert_eq!(run(physical, options("telex", false, true)), physical);
+    }
+
+    let mut punctuation = root(options("telex", false, true));
+    for key in "barn".chars() {
+        punctuation.character(key);
+    }
+    assert_eq!(punctuation.punctuation_boundary('.'), "bản.");
+
+    let mut literal = root(options("telex", false, true));
+    for key in "barn".chars() {
+        literal.character(key);
+    }
+    assert_eq!(literal.raw_boundary(), "barn");
+
+    // Exercise the shipped, case-insensitive English Bloom, not only the stub lexicon.
+    let catalog = inputkey_runtime::Catalog::bundled();
+    let mut shipped = inputkey_runtime::create_machine(
+        &catalog,
+        "vi",
+        inputkey_runtime::default_config(&catalog, "vi"),
+    )
+    .unwrap();
+    for key in "barn".chars() {
+        shipped.dispatch(RootInput::Character(key));
+    }
+    assert_eq!(shipped.state().rendered, "bản");
+    assert_eq!(shipped.dispatch(RootInput::SpaceBoundary), "bản ");
+}
+
+#[test]
 fn known_english_word_does_not_turn_into_speculative_vietnamese() {
     let mut machine = root(options("telex", false, true));
     for key in "queue".chars() {
@@ -265,6 +366,33 @@ fn known_english_word_does_not_turn_into_speculative_vietnamese() {
         shipped.dispatch(RootInput::Character(key));
     }
     assert_eq!(shipped.dispatch(RootInput::SpaceBoundary), "queue ");
+}
+
+#[test]
+fn phonotactic_rejection_does_not_depend_on_english_dictionary() {
+    let mut without_english = RootMachine::new(
+        "vi",
+        Box::new(Machine::new(options("telex", false, true), None)),
+    );
+    for key in "queue".chars() {
+        without_english.character(key);
+    }
+    assert_eq!(without_english.space_boundary(), "queue ");
+
+    for (physical, expected) in [("quees", "quế"), ("barn", "bản"), ("dudowcj", "được")] {
+        let mut machine = RootMachine::new(
+            "vi",
+            Box::new(Machine::new(options("telex", false, true), None)),
+        );
+        for key in physical.chars() {
+            machine.character(key);
+        }
+        assert_eq!(
+            machine.space_boundary(),
+            format!("{expected} "),
+            "{physical}"
+        );
+    }
 }
 
 #[test]

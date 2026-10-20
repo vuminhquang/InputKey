@@ -806,7 +806,27 @@ fn valid_onset_nucleus(onset: &str, nucleus: &str) -> bool {
     if nucleus.starts_with("oe") && matches!(onset, "b" | "m" | "p" | "ph" | "v") {
         return false;
     }
+    // Vietnamese onset spelling is constrained by the following vowel. These
+    // are productive orthographic rules, not lookups of individual words.
+    if matches!(onset, "gh" | "ngh") && !matches!(first, 'e' | 'i') {
+        return false;
+    }
+    if onset == "ng" && matches!(first, 'e' | 'i') {
+        return false;
+    }
+    if onset == "g" && first == 'e' {
+        return false;
+    }
+    if onset == "c" && matches!(first, 'e' | 'i' | 'y') {
+        return false;
+    }
     if onset == "k" && !"eiy".contains(first) {
+        return false;
+    }
+    // The orthographic `qu` already encodes a labial glide. A second rounded
+    // offglide in the rime would double that glide (e.g. speculative `quêu`).
+    // Keep this at the onset/rime boundary, not as an exception for `queue`.
+    if onset == "qu" && nucleus.chars().count() > 1 && nucleus.ends_with('u') {
         return false;
     }
     true
@@ -1100,6 +1120,19 @@ fn ordered_telex_intent_matches(
         &mut modifiers,
         require_complete,
     )
+}
+
+// A complete phonotactically accepted Telex parse wins over English spelling.
+// Neither dictionary membership nor the presence of a tone is a validity rule.
+fn has_complete_vietnamese_telex_intent(raw: &str, rendered: &str) -> bool {
+    if !is_valid_syllable(rendered) {
+        return false;
+    }
+    let normalized: String = rendered.chars().map(lower_char).collect();
+    telex_intent_candidate(normalized).is_some_and(|candidate| {
+        preserves_physical_prefix(raw, &candidate)
+            && ordered_telex_intent_matches(raw, &candidate, true)
+    })
 }
 
 fn apply_case_pattern(source: &str, rendered: &str) -> String {
@@ -1477,18 +1510,27 @@ impl Machine {
             && !self
                 .raw
                 .eq_ignore_ascii_case(&telex_encoding(&self.rendered))
+            && !has_complete_vietnamese_telex_intent(&self.raw, &self.rendered)
     }
 
     fn render_candidate(&mut self) -> String {
         self.rendered = apply_tone(&self.chars, self.tone).into_iter().collect();
+        let analysis = analyze_transducer(&self.rendered);
         if self.prefers_known_english_raw() {
-            self.mode = Mode::RawLocked;
-            self.phase = Phase::Dead;
+            // An English hit is a display preference, not an irreversible
+            // composition decision: a later key may complete valid Vietnamese
+            // (e.g. dud is an English word and the prefix of dudowcj -> được).
+            if analysis.viable {
+                self.mode = Mode::ViCandidate;
+                self.phase = analysis.phase;
+            } else {
+                self.mode = Mode::RawLocked;
+                self.phase = Phase::Dead;
+                self.correction_blocked = true;
+            }
             self.rendered = self.fallback.clone();
-            self.correction_blocked = true;
             return self.rendered.clone();
         }
-        let analysis = analyze_transducer(&self.rendered);
         self.phase = analysis.phase;
 
         if !analysis.viable && self.transformed {
@@ -1991,6 +2033,7 @@ impl Machine {
                         .as_ref()
                         .is_some_and(|words| words.has_word(&self.raw))
                     && !self.raw.eq_ignore_ascii_case(&telex_encoding(&corrected))
+                    && !has_complete_vietnamese_telex_intent(&self.raw, &corrected)
                 {
                     return self.apply_finalize();
                 }
@@ -2070,6 +2113,48 @@ impl Machine {
                 String::new()
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod phonotactic_tests {
+    use super::*;
+
+    #[test]
+    fn onset_spelling_and_rime_cooccurrence_are_rules_not_vocabulary() {
+        for word in [
+            "bản", "được", "nghe", "nghiêng", "nghệ", "ghế", "kê", "gì", "gà", "cà", "ngà", "quay",
+            "quây", "quý", "quạt", "quê", "quên", "quế", "quơ", "khoe", "bát", "phất",
+        ] {
+            assert!(is_valid_syllable(word), "valid Vietnamese syllable: {word}");
+        }
+        for word in [
+            "quêu", "gue", "ge", "nge", "ngi", "gha", "ngha", "ce", "cê", "moe", "mỏe", "bàt",
+            "đườc",
+        ] {
+            assert!(
+                !is_valid_syllable(word),
+                "invalid Vietnamese syllable: {word}"
+            );
+        }
+    }
+
+    #[test]
+    fn english_collision_uses_completed_ordered_telex_not_tone_heuristic() {
+        for (raw, word) in [
+            ("barn", "bản"),
+            ("banr", "bản"),
+            ("dud", "đu"),
+            ("dudowcj", "được"),
+            ("quees", "quế"),
+        ] {
+            assert!(
+                has_complete_vietnamese_telex_intent(raw, word),
+                "{raw} -> {word}"
+            );
+        }
+        assert!(!has_complete_vietnamese_telex_intent("queue", "quêu"));
+        assert!(!has_complete_vietnamese_telex_intent("dcudowj", "được"));
     }
 }
 
