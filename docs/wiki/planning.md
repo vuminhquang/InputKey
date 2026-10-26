@@ -1,23 +1,25 @@
 # InputKey active plan
 
-Checkpoint: 7
+Checkpoint: 8
 
 ## Current objective
 
-The approved InputKey v5.2.15 source and packaging release is COMPLETE. Continue ordinary product maintenance from this independent canonical product Git. A GitHub Release does not implicitly submit a Chrome/Edge store update or deploy any user machine; those are separate authorization/verification scopes.
+The authorized InputKey v5.2.16 Shift+Space behavioral maintenance release is COMPLETE at the product source, cross-platform GitHub Release, and previously installed Windows portable targets. The historical v5.2.15 release evidence is retained in [the release archive](archive/2026-10-20-v5.2.15-release-evidence.md). A GitHub Release does not implicitly update either browser store.
 
-## Verified release evidence (2026-10-20)
+## Verified release evidence (2026-10-26)
 
-- Exact tagged source: `v5.2.15` (annotated, peeled commit `5a730270e5f2a5f36ab803da9870ec0d88cc9627`). The release incorporates previously verified Vietnamese phonotactic/ordered-Telex changes from `4115b7bcfb09643ed7d331075357b663e6e96e04` with synchronized VERSION 5.2.15, without a second product-source mirror.
-- Behavior contract: completed ordered valid Vietnamese interpretations override a coincident English raw word, e.g. `barn`/`banr` -> `bản`, `dudowcj` -> `được`, `quees` -> `quế`. Incompatible speculative `quêu` is rejected so `queue` remains raw even without an English lexicon; base-letter order, explicit raw/cancel and equal-ranked ambiguity protections stay intact. Valid completed Vietnamese may also win without a tone (e.g. `dud` -> `đu`), with explicit literal control available.
-- Local source acceptance: 27/27 Vietnamese integration regressions, full Rust workspace, fmt, Clippy all targets with warnings denied, handoff/architecture/version, Chrome UI, Windows hook/TSF/startup, C ABI optimized build and smoke succeeded, marker `BARN_5_2_15_L2_GATES_GREEN`. Local Windows packaging script also completed successfully.
-- GitHub main pipeline [39401412702](https://github.com/vuminhquang/InputKey/actions/runs/39401412702): Linux/Web, Windows and macOS successful. Version-tag pipeline [39401795775](https://github.com/vuminhquang/InputKey/actions/runs/39401795775): Linux/Web, Windows, macOS and GitHub Release all successful. [v5.2.15 release](https://github.com/vuminhquang/InputKey/releases/tag/v5.2.15) published (not draft or prerelease) with exactly four ZIPs:
-  - Chromium: `InputKey-Chromium-5.2.15.zip`, 533941 bytes, SHA-256 `9001a35df2ea16754678db21b48c304ed967c98ce7c415d89b40078caf02ee5b`.
-  - Linux: `InputKey-Linux-x86_64-5.2.15.zip`, 681750 bytes, SHA-256 `41d479c6c56507bde5ed8608c08ac0f1065033daac1e328c063b3d823505eacb`.
-  - macOS: `InputKey-macOS-5.2.15.zip`, 592794 bytes, SHA-256 `136f01f3299389c503d778512249c8f6d054aa7dcb2f490314a7bba652d287b9`.
-  - Windows: `InputKey-Windows-5.2.15.zip`, 2637825 bytes, SHA-256 `0dad2824e1e3d6f4c62625778f4cd078affbff3ed4df7cba2c872c6818735fc4`.
-- Physical installed-system evidence, individual machine paths and account-specific status are not part of this public product planning document; release packaging and deployment have independent acceptance scopes.
+- Behavior: Shift+Space uses normal SpaceBoundary when `displayed == raw`; otherwise it preserves RawBoundary (raw physical keystrokes, without adding Space). No modifier timing or fresh-Shift logic; root/language composition contracts remain intact.
+- Exact source: annotated tag `v5.2.16`, peeled commit `b054407d02fb9b89c24125113a32e9cbcb75340e`. All platform version metadata synchronized to `5.2.16`.
+- Local gates: full Rust workspace tests, Clippy all targets with denied warnings, formatting, architecture, version/handoff, Chrome UI 19/19, Windows Hook/TSF/startup, Linux adapters, C ABI optimized build and smoke succeeded. Windows and Chromium release packaging succeeded.
+- [Main CI run 40289988287](https://github.com/vuminhquang/InputKey/actions/runs/40289988287): Linux/Web, Windows and macOS passed.
+- [Tag CI run 40290503321](https://github.com/vuminhquang/InputKey/actions/runs/40290503321): Linux/Web, Windows, macOS and GitHub Release all passed.
+- [GitHub Release v5.2.16](https://github.com/vuminhquang/InputKey/releases/tag/v5.2.16) is publicly published (neither draft nor prerelease), with four ZIP packages verified against release asset metadata:
+  - Chromium: `InputKey-Chromium-5.2.16.zip`, 534112 bytes, SHA-256 `2f5a2807ca3f204469205e4f5aa67cf7e8b2135b0e22d6cc97ca9e2ff2fb5dd2`.
+  - Linux: `InputKey-Linux-x86_64-5.2.16.zip`, 682086 bytes, SHA-256 `1bc97b04369619220a07516c0f73dce6f9ad66ee031cb8afbbed4fa0cf8bff46`.
+  - macOS: `InputKey-macOS-5.2.16.zip`, 593342 bytes, SHA-256 `3592f101f7a78f43f0e1d4f03e8d6d9e1e839b6672d0c3a40fe339c005872895`.
+  - Windows: `InputKey-Windows-5.2.16.zip`, 2637507 bytes, SHA-256 `e4f4cc7200458b45e4e2f9afd4217b88f4e8c1d98fcc415de0737a06af1236a6`.
+- Windows portable deployments on the previously approved physical targets were verified separately (installed package files matching local ZIP 12/12, running target processes, version and TSF binding). Account-specific locations, device status and private recovery paths are retained only in the owner-side deployment receipt.
 
 ## Next safe action
 
-No further publication action for this completed GitHub release. Store updates, physical interactive typing after prolonged lock/unlock and future product changes each require their own scope and evidence. Do not mistake a deployed binary, GitHub tag or CI result for an unobserved store approval or live keyboard acceptance.
+No further GitHub release action for v5.2.16. Chrome Web Store and Edge Add-ons submissions are separate operations, not proven by GitHub publication or a locally unpacked extension. Real typing after prolonged lock/unlock remains a distinct interactive acceptance from packaging or TSF registration.
