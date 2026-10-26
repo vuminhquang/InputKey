@@ -22,7 +22,7 @@ InputKey uses one semantic root state machine across every platform. Physical in
 - **Mouse clicks, Enter, Tab, arrows, Home/End, Page Up/Down, Delete, and Insert** enter one `CaretMoveBoundary` state while retaining the original cause. The language commits the currently displayed composition, then the original caret-moving event continues to the application.
 - **Ctrl/Alt/Win command chords** enter `ShortcutBoundary`: the displayed composition is committed first, then the original shortcut continues unchanged. AltGraph is treated as character input, not as a shortcut.
 - **Backspace and Escape** are `CompositionControl` events.
-- **Shift+Space** enters `RawBoundary`: it commits the physical keystroke sequence for the current token and consumes the Space keystroke.
+- **Shift+Space** uses `SpaceBoundary` and inserts a space if the displayed token equals its raw keystrokes; otherwise it enters `RawBoundary`, commits the physical keystrokes and consumes Space without inserting it.
 - Focus loss, context destruction, disable, language changes, finalize, and reset are explicit **Lifecycle** events.
 
 For example, if `dd` displays `đ`, Left Arrow commits `đ` before the caret moves; clicking elsewhere does the same through `CaretMoveBoundary(Mouse)`. `Ctrl+A` commits the displayed token before Select All runs. `refer` may display a transformed candidate, while Shift+Space commits the physical `refer`.
@@ -52,7 +52,7 @@ The shared engine supports:
 - repeat-to-cancel
 - English collision recovery
 - Backspace/Escape reconstruction
-- semantic caret/shortcut/composition/lifecycle boundaries and one-shot Shift+Space raw escape
+- semantic caret/shortcut/composition/lifecycle boundaries and conditional one-shot Shift+Space raw escape
 - language-owned boundary correction triggered by both Space and punctuation boundaries
 
 At Space or punctuation boundaries, the Vietnamese FSM can recover modifier-order variants without inventing missing tone input, including `nhieue → nhiều`, `chueyern → chuyển`, `dduocwj → được`, and `dduwocj → được`. Boundary correction preserves the physical initial prefix: consonant onsets stay intact (`stop → stop`), while vowel-initial candidates remain in the same family (`a/ă/â`, `e/ê`, `o/ô/ơ`, `u/ư`, `i`, `y`). `[` and `]` are ordinary punctuation, not Vietnamese shape shortcuts. Live typing remains sequential; explicit repeat-cancel still happens immediately at the character event.

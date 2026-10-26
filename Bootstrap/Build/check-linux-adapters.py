@@ -9,7 +9,7 @@ adapters = {
 
 required_semantic_calls = (
     "inputkey_caret_move_boundary_utf8",
-    "inputkey_raw_boundary",
+    "inputkey_shift_space_boundary",
     "inputkey_shortcut_boundary",
     "inputkey_composition_control_utf8",
     "inputkey_accepts_character_utf8",
@@ -27,7 +27,7 @@ for name, source in adapters.items():
             + ", ".join(missing)
         )
 
-    raw = source.find("inputkey_raw_boundary")
+    raw = source.find("inputkey_shift_space_boundary")
     shortcut = source.find("inputkey_shortcut_boundary")
     character = source.find("inputkey_accepts_character_utf8")
     if not (0 <= raw < shortcut < character):

@@ -249,6 +249,29 @@ fn regression_matrix() {
 }
 
 #[test]
+fn shift_space_uses_the_current_displayed_raw_comparison_only() {
+    use inputkey_core_abstractions::shift_space_boundary;
+
+    let mut unchanged = root(options("telex", false, true));
+    for c in "queue".chars() {
+        unchanged.character(c);
+    }
+    assert_eq!(unchanged.physical(), unchanged.displayed());
+    let event = shift_space_boundary(&unchanged.physical(), &unchanged.displayed());
+    assert_eq!(event, RootInput::SpaceBoundary);
+    assert_eq!(unchanged.semantic(event), "queue ");
+
+    let mut changed = root(options("telex", false, true));
+    for c in "dudowcj".chars() {
+        changed.character(c);
+    }
+    assert_ne!(changed.physical(), changed.displayed());
+    let event = shift_space_boundary(&changed.physical(), &changed.displayed());
+    assert_eq!(event, RootInput::RawBoundary);
+    assert_eq!(changed.semantic(event), "dudowcj");
+}
+
+#[test]
 fn delayed_telex_modifiers_preserve_physical_base_order() {
     let mut english_prefix = root(options("telex", false, true));
     for key in "dud".chars() {

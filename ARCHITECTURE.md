@@ -38,7 +38,7 @@ InputKey uses one language-independent root composition machine across browser a
 - mouse and navigation inputs share `CaretMoveBoundary` while preserving the original cause
 - command chords use `ShortcutBoundary`; AltGraph remains character input
 - Backspace/Escape are composition-control events
-- Shift+Space is a one-shot raw boundary
+- Shift+Space is a one-shot raw boundary only when rendered differs from raw; otherwise it is SpaceBoundary
 - native dynamic language packs use transition-only ABI v3; the public C/WASM semantic ABI is v4
 - Telex, Simple Telex, VNI, tone/vowel-shape handling, repeat-to-cancel, English collision recovery, and replay remain language/runtime features
 

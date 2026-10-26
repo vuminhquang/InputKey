@@ -24,7 +24,7 @@ Then log out/in (or restart the text input services), open **System Settings →
 
 ## Composition boundaries
 
-Space and punctuation finalize the current word. Arrow/navigation keys, Tab, Return, and keypad Enter commit the currently displayed marked text and then let the original key continue to the client. Shift+Space is a fixed one-shot raw boundary: it commits only the physical keystroke sequence, consumes the Space keystroke, and ends composition.
+Space and punctuation finalize the current word. Arrow/navigation keys, Tab, Return, and keypad Enter commit the currently displayed marked text and then let the original key continue to the client. Shift+Space inserts ordinary Space when displayed equals raw; otherwise it commits the physical keystrokes without inserting Space and ends composition.
 
 ## Configuration
 

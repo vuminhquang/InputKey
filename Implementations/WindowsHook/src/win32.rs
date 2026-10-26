@@ -620,7 +620,7 @@ fn worker(shared: Arc<Shared>, factory: EngineFactory) {
                     }
                 }
                 EventKind::RawBoundary => {
-                    let text = transition::apply(engine.as_mut(), RootInput::RawBoundary);
+                    let text = transition::apply_shift_space(engine.as_mut());
                     if let Some(range) = owned.as_mut() {
                         let _ = range.replace(automation.as_ref(), clipboard.as_ref(), &text);
                     }

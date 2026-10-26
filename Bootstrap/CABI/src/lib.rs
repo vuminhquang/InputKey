@@ -1,5 +1,5 @@
 use inputkey_boundary::{InputEvent, InputType};
-use inputkey_core_abstractions::LanguageCatalogPort;
+use inputkey_core_abstractions::{shift_space_boundary, LanguageCatalogPort};
 use inputkey_operators::Session;
 use inputkey_runtime::{catalog_json, config_from_json, create_machine, Catalog};
 use std::collections::HashMap;
@@ -287,6 +287,24 @@ pub unsafe extern "C" fn inputkey_composition_control_utf8(
     )
 }
 
+/// Shift+Space preserves literal output only when composition transformed raw.
+#[no_mangle]
+pub extern "C" fn inputkey_shift_space_boundary(handle: u64, out: *mut u8, cap: usize) -> usize {
+    result(
+        handle,
+        |session| {
+            let state = session.state();
+            let kind = match shift_space_boundary(&state.raw, &state.rendered) {
+                inputkey_core_abstractions::RootInput::SpaceBoundary => InputType::SpaceBoundary,
+                _ => InputType::RawBoundary,
+            };
+            session.handle(event(kind, String::new())).commit
+        },
+        out,
+        cap,
+    )
+}
+
 #[no_mangle]
 pub extern "C" fn inputkey_raw_boundary(handle: u64, out: *mut u8, cap: usize) -> usize {
     command(
@@ -503,4 +521,51 @@ pub unsafe extern "C" fn inputkey_option_default_enabled(
         .and_then(|language| language.options.into_iter().nth(index))
         .map(|option| i32::from(option.default_enabled))
         .unwrap_or(0)
+}
+
+#[cfg(test)]
+mod shift_space_tests {
+    use super::*;
+
+    fn type_word(handle: u64, word: &str) {
+        for character in word.chars() {
+            let utf8 = character.to_string();
+            let mut out = [0u8; 128];
+            unsafe {
+                inputkey_character_utf8(
+                    handle,
+                    utf8.as_ptr(),
+                    utf8.len(),
+                    out.as_mut_ptr(),
+                    out.len(),
+                );
+            }
+        }
+    }
+
+    fn shift_space(handle: u64) -> String {
+        let mut out = [0u8; 256];
+        let count = inputkey_shift_space_boundary(handle, out.as_mut_ptr(), out.len());
+        String::from_utf8(out[..count].to_vec()).unwrap()
+    }
+
+    #[test]
+    fn shift_space_boundary_equal_text_inserts_space() {
+        let handle = unsafe { inputkey_create(std::ptr::null(), 0, 1) };
+        assert_ne!(handle, 0);
+        type_word(handle, "queue");
+        assert_eq!(shift_space(handle), "queue ");
+        assert_eq!(inputkey_has_history(handle), 0);
+        inputkey_destroy(handle);
+    }
+
+    #[test]
+    fn shift_space_boundary_changed_text_restores_raw_without_space() {
+        let handle = unsafe { inputkey_create(std::ptr::null(), 0, 1) };
+        assert_ne!(handle, 0);
+        type_word(handle, "dd");
+        assert_eq!(shift_space(handle), "dd");
+        assert_eq!(inputkey_has_history(handle), 0);
+        inputkey_destroy(handle);
+    }
 }

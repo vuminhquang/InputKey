@@ -803,7 +803,13 @@ impl TextService {
                 if !runtime.active() {
                     return Ok(BOOL::from(false));
                 }
-                runtime.engine.dispatch(RootInput::RawBoundary)
+                let state = runtime.engine.state();
+                runtime
+                    .engine
+                    .dispatch(inputkey_core_abstractions::shift_space_boundary(
+                        &state.raw,
+                        &state.rendered,
+                    ))
             };
             if request_edit(&self.control, context, EditAction::Commit(commit)).is_err() {
                 self.fail_open();

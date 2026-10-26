@@ -136,7 +136,7 @@ static NSString *InputKeyCatalogJSON(void) {
     [content addSubview:self.smartCorrection];
 
     NSTextField *boundary = [self
-        label:@"Space commits the current token. Shift+Space keeps the physical key sequence and ends composition without inserting a space."
+        label:@"Space commits the token. Shift+Space inserts Space if raw matches displayed; otherwise it restores raw without Space."
         frame:NSMakeRect(24, 58, 406, 50)];
     boundary.maximumNumberOfLines = 3;
     boundary.lineBreakMode = NSLineBreakByWordWrapping;

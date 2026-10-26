@@ -241,7 +241,7 @@ public:
 
         if (rawBoundary && inputkey_has_history(handle)) {
             auto raw = take([&](uint8_t *p, size_t n) {
-                return inputkey_raw_boundary(handle, p, n);
+                return inputkey_shift_space_boundary(handle, p, n);
             });
             ic->commitString(raw);
             clearPreedit(ic);

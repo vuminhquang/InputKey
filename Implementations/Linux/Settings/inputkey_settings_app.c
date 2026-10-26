@@ -274,8 +274,8 @@ int main(int argc, char **argv) {
     gtk_box_pack_start(GTK_BOX(root), smart_correction, FALSE, FALSE, 0);
 
     GtkWidget *hint = gtk_label_new(
-        "Space commits the current token. Shift+Space keeps the physical key sequence "
-        "and ends composition without inserting a space.");
+        "Space commits the token. Shift+Space inserts Space if raw matches displayed; "
+        "otherwise it restores raw without Space.");
     gtk_label_set_line_wrap(GTK_LABEL(hint), TRUE);
     gtk_widget_set_halign(hint, GTK_ALIGN_START);
     gtk_style_context_add_class(gtk_widget_get_style_context(hint), "dim-label");

@@ -2,7 +2,7 @@
 
 The language-independent root composition machine lives in `Operators` and is compiled to WASM for Chrome together with the bundled language children. This file documents behavior; it does not define rules.
 
-Chrome/Edge uses the same composition-boundary semantics as the native adapters. Shift+Space is a fixed one-shot raw boundary; it is not a persistent mode or a configurable shortcut.
+Chrome/Edge uses the same composition-boundary semantics as the native adapters. Shift+Space is a one-shot raw boundary only if displayed differs from raw; otherwise it is a normal Space boundary. It is not a persistent mode or a configurable shortcut.
 
 ## Vietnamese child modes
 
@@ -55,7 +55,7 @@ The root classifies input into semantic events and enters the corresponding stat
 
 Mouse clicks and Enter/Tab/navigation/Delete/Insert all enter `CaretMoveBoundary`; the `cause` distinguishes Mouse, Enter, Left, and so on. The language commits the displayed text and ends composition before the original caret-moving event continues.
 
-Ctrl/Alt/Meta command chords enter `ShortcutBoundary`, commit displayed composition, and continue to the application unchanged. AltGraph is excluded from shortcut classification. Backspace/Escape are `CompositionControl` events. Shift+Space enters `RawBoundary`, commits the physical keystream, and consumes the Space key. Focus/context/enable/language changes are `Lifecycle` events.
+Ctrl/Alt/Meta command chords enter `ShortcutBoundary`, commit displayed composition, and continue to the application unchanged. AltGraph is excluded from shortcut classification. Backspace/Escape are `CompositionControl` events. Shift+Space selects `SpaceBoundary` if displayed equals raw; otherwise it enters `RawBoundary`, commits the physical keystream, and consumes the Space key. Focus/context/enable/language changes are `Lifecycle` events.
 
 Language packs do not expose separate key/backspace/finalize/correction operations to the root. They keep their own language FSM internally and consume the single RootTransition stream.
 

@@ -264,8 +264,9 @@
       e.preventDefault();
       e.stopImmediatePropagation();
       const old = s.lastRendered;
-      const raw = s.engine.rawBoundary();
-      replaceBeforeCursor(el, old, raw);
+      const raw = s.engine.raw;
+      const committed = raw === s.engine.rendered ? s.engine.spaceBoundary() : s.engine.rawBoundary();
+      replaceBeforeCursor(el, old, committed);
       s.lastRendered = '';
       return;
     }

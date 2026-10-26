@@ -97,6 +97,32 @@ test('Shift+Space commits only the physical keys', () => {
   assert.equal(input.value, 'as');
 });
 
+test('Shift+Space inserts Space when rendered matches raw', () => {
+  for (const word of ['queue', 'HELLO']) {
+    const input = new Input();
+    type(input, word);
+    const event = send(input, ' ', { shiftKey: true, code: 'Space' });
+    assert.equal(event.prevented, true);
+    assert.equal(input.value, word + ' ');
+  }
+});
+
+test('Shift+Space still restores transformed Vietnamese text without Space', () => {
+  const input = new Input();
+  type(input, 'dd');
+  assert.equal(input.value, 'đ');
+  send(input, ' ', { shiftKey: true, code: 'Space' });
+  assert.equal(input.value, 'dd');
+});
+
+test('Shift+Space with upper-case Telex conversion still restores raw', () => {
+  const input = new Input();
+  type(input, 'TOOI');
+  assert.equal(input.value, 'TÔI');
+  send(input, ' ', { shiftKey: true, code: 'Space' });
+  assert.equal(input.value, 'TOOI');
+});
+
 test('normal Space keeps word-finalization behavior', () => {
   const input = new Input();
   type(input, 'as');

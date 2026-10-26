@@ -23,6 +23,7 @@ size_t inputkey_caret_move_boundary_utf8(uint64_t handle, const uint8_t *cause, 
 size_t inputkey_shortcut_boundary(uint64_t handle, uint8_t *out, size_t cap);
 size_t inputkey_composition_control_utf8(uint64_t handle, const uint8_t *control, size_t len, uint8_t *out, size_t cap);
 size_t inputkey_raw_boundary(uint64_t handle, uint8_t *out, size_t cap);
+size_t inputkey_shift_space_boundary(uint64_t handle, uint8_t *out, size_t cap);
 size_t inputkey_lifecycle_utf8(uint64_t handle, const uint8_t *lifecycle, size_t len, uint8_t *out, size_t cap);
 size_t inputkey_rendered(uint64_t handle, uint8_t *out, size_t cap);
 size_t inputkey_raw(uint64_t handle, uint8_t *out, size_t cap);

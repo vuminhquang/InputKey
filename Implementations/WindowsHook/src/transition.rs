@@ -1,7 +1,12 @@
-use inputkey_core_abstractions::{RootInput, TypingEnginePort};
+use inputkey_core_abstractions::{shift_space_boundary, RootInput, TypingEnginePort};
 
 pub fn apply(engine: &mut dyn TypingEnginePort, input: RootInput) -> String {
     engine.dispatch(input)
+}
+
+pub fn apply_shift_space(engine: &mut dyn TypingEnginePort) -> String {
+    let state = engine.state();
+    apply(engine, shift_space_boundary(&state.raw, &state.rendered))
 }
 
 #[cfg(test)]
@@ -82,6 +87,17 @@ mod tests {
             ),
             "go"
         );
+        assert!(!engine.history_active());
+    }
+
+    #[test]
+    fn shift_space_with_unmodified_text_commits_space() {
+        let mut engine = Fake {
+            value: String::new(),
+        };
+        apply(&mut engine, RootInput::Character('H'));
+        apply(&mut engine, RootInput::Character('I'));
+        assert_eq!(apply_shift_space(&mut engine), "HI ");
         assert!(!engine.history_active());
     }
 

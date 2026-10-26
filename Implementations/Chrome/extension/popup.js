@@ -189,8 +189,9 @@ chrome.storage.onChanged.addListener((_, area) => {
       !e.ctrlKey && !e.metaKey && !e.altKey && tester.raw
     ) {
       e.preventDefault();
-      const raw = tester.rawBoundary();
-      replaceOwned(testerRendered, raw);
+      const raw = tester.raw;
+      const committed = raw === tester.rendered ? tester.spaceBoundary() : tester.rawBoundary();
+      replaceOwned(testerRendered, committed);
       testerRendered = '';
       return;
     }

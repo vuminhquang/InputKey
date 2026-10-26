@@ -30,6 +30,24 @@ static NSString *InputKeyStringFromCommand(uint64_t handle, InputKeyCommand comm
     return result ?: @"";
 }
 
+// Boundary commands mutate the session, so size by nonmutating state reads first.
+static NSString *InputKeyShiftSpace(uint64_t handle) {
+    const size_t rawBytes = inputkey_raw(handle, NULL, 0);
+    const size_t displayedBytes = inputkey_rendered(handle, NULL, 0);
+    const size_t largestInput = MAX(rawBytes, displayedBytes);
+    // A Unicode scalar needs at most four UTF-8 bytes; allow the trailing Space.
+    if (largestInput > (SIZE_MAX - 2) / 4) return @"";
+    const size_t capacity = largestInput * 4 + 2;
+    uint8_t *buffer = calloc(capacity, sizeof(uint8_t));
+    if (buffer == NULL) return @"";
+    const size_t bytes = inputkey_shift_space_boundary(handle, buffer, capacity);
+    NSString *value = [[NSString alloc] initWithBytes:buffer
+                                               length:MIN(bytes, capacity - 1)
+                                             encoding:NSUTF8StringEncoding];
+    free(buffer);
+    return value ?: @"";
+}
+
 static NSString *InputKeyCatalogJSON(void) {
     const size_t required = inputkey_catalog_json(NULL, 0);
     uint8_t *buffer = calloc(required + 1, sizeof(uint8_t));
@@ -269,7 +287,7 @@ static BOOL InputKeyAcceptsKey(uint64_t handle, NSString *key) {
     const BOOL shift = (flags & NSEventModifierFlagShift) != 0;
 
     if (event.keyCode == 49 && shift && !control && !option && !command && [self hasActiveToken]) {
-        NSString *raw = InputKeyStringFromCommand(_core, inputkey_raw_boundary);
+        NSString *raw = InputKeyShiftSpace(_core);
         [self commitText:raw client:sender];
         return YES;
     }

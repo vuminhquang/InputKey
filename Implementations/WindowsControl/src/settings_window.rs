@@ -409,7 +409,7 @@ unsafe fn build_controls(parent: HWND) {
         create_control(
             parent,
             "STATIC",
-            "Space commits the current token. Shift+Space keeps the physical key sequence and ends composition without inserting a space.",
+            "Space commits the token. Shift+Space inserts Space if raw matches displayed; otherwise it restores raw without Space.",
             0,
             24,
             416,

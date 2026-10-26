@@ -137,6 +137,15 @@ pub enum RootInput {
     Lifecycle(LifecycleEvent),
 }
 
+/// Shift+Space uses ordinary Space when the displayed composition equals raw.
+pub fn shift_space_boundary(raw: &str, rendered: &str) -> RootInput {
+    if raw == rendered {
+        RootInput::SpaceBoundary
+    } else {
+        RootInput::RawBoundary
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum RootPhase {
     Idle,

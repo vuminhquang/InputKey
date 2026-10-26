@@ -21,7 +21,7 @@ Các ngôn ngữ đang hỗ trợ:
 - Tiếng Thụy Điển — Swedish Telex: ä, ö, å.
 - Tiếng Đức — German Telex: ä, ö, ü, ß.
 
-Chọn ngôn ngữ và phương pháp gõ tương ứng ngay trong popup. Hỗ trợ các ô input, textarea và contenteditable phổ biến; có thể chỉnh phím tắt bật/tắt và tuỳ chọn riêng theo ngôn ngữ. Shift+Space hoàn nguyên từ hiện tại về các phím vật lý đã gõ và không chèn dấu cách.
+Chọn ngôn ngữ và phương pháp gõ tương ứng ngay trong popup. Hỗ trợ các ô input, textarea và contenteditable phổ biến; có thể chỉnh phím tắt bật/tắt và tuỳ chọn riêng theo ngôn ngữ. Shift+Space thêm khoảng trắng nếu từ hiển thị trùng chuỗi gõ gốc; nếu không, tổ hợp này hoàn nguyên từ về chuỗi gõ gốc mà không thêm khoảng trắng.
 
 Engine Rust dùng chung được đóng gói thành WebAssembly chạy cục bộ. Nội dung đang gõ chỉ được xử lý trong bộ nhớ trình duyệt, không được lưu hoặc gửi tới nhà phát triển; chỉ cài đặt của extension được lưu cục bộ. Không quảng cáo, analytics, remote code hay dịch vụ gõ từ xa. Bỏ qua ô mật khẩu.
 

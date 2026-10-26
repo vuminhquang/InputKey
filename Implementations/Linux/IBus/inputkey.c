@@ -269,7 +269,7 @@ static gboolean process_key_event(
                       IBUS_SUPER_MASK | IBUS_META_MASK | IBUS_HYPER_MASK));
     if (raw_boundary && inputkey_has_history(self->core)) {
         commit_text_owned(
-            self, take_core(inputkey_raw_boundary, self->core));
+            self, take_core(inputkey_shift_space_boundary, self->core));
         return TRUE;
     }
 

@@ -21,7 +21,7 @@ Supported input languages:
 - Swedish — Swedish Telex for ä, ö, å.
 - German — German Telex for ä, ö, ü, ß.
 
-Choose a language and its available method from the popup. InputKey works in common input, textarea and contenteditable fields. Configure the toggle shortcut and language-specific options. Shift+Space restores the current token's physical keystrokes without inserting a space.
+Choose a language and its available method from the popup. InputKey works in common input, textarea and contenteditable fields. Configure the toggle shortcut and language-specific options. Shift+Space inserts a normal space when the current token has not been transformed, or restores its physical keystrokes without a space when it has.
 
 The shared deterministic Rust typing engine runs as packaged local WebAssembly. Typed content is processed in browser memory, not stored or sent to the developer. Only local extension preferences are saved. No ads, analytics, remote code or developer-operated typing service. Password fields are ignored.
 
